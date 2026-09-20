@@ -1,0 +1,196 @@
+/* Design tokens — the ONE place the app's accent colour and type faces are chosen.
+   Everything else refers to these, so a palette change is an edit here rather than a
+   sweep (they replaced ~90 hardcoded violet values). Semantic colours are deliberately
+   NOT tokenised away: red = out of range, green = the reference band, amber = worth a
+   look. Those carry meaning and must not follow the theme.
+
+   FONTS: no CDN, ever — a webfont link is an external request on every page load, and
+   this app's privacy charter rules that out. These are faces already on the machine:
+   Bahnschrift (Windows' DIN — instrument lettering, excellent figures at large sizes),
+   Sitka (a real text serif), Cascadia Mono (tabular figures), Segoe UI for prose. Each
+   stack falls back through equivalents, so a machine without them still reads sensibly.
+
+   Chart colours live in src/theme.js — Recharts needs JS strings, not CSS variables.
+   Keep the two in sync; theme.js names which token each mirrors. */
+:root {
+  --c-accent: #2b3440;         /* graphite — primary actions, links, active state */
+  --c-accent-strong: #1b2229;  /* hover/pressed */
+  --c-accent-soft: #eef1f4;    /* tinted surfaces (active pill, callout backgrounds) */
+  --c-accent-line: #c9d0d8;    /* borders on tinted surfaces */
+  --c-baseline: #7048e8;       /* personal baseline — deliberately NOT the accent: it
+                                  marks one specific feature and must stay distinct */
+  --c-baseline-soft: #9775fa;
+  --c-ink: #161b21;
+  --c-muted: #6b7683;
+  --c-line: #e3e6ea;
+
+  /* ---- grounds. Split out for the dark theme: every panel/table/modal used to hardcode
+     #fff and every page ground #f8f9fa, which is exactly what a theme has to move. */
+  --c-page: #f8f9fa;         /* the page itself */
+  --c-surface: #ffffff;      /* a panel, a table, a dialog */
+  --c-surface-2: #f8f9fa;    /* a quiet fill INSIDE a surface (payload dump, code block) */
+
+  /* ---- semantic. These carry MEANING, not theme: red is out of range, green is the
+     reference band, amber is worth a look. They are tokens so the same meaning can be
+     rendered legibly on a dark ground — a value that reads as "caution" on white is
+     often unreadable on near-black. What must never happen is a PALETTE change moving
+     them: the accent above may become anything, and these stay red/green/amber. */
+  --sem-bad: #c92a2a;        /* out of range, error text */
+  --sem-bad-strong: #e03131; /* a destructive action */
+  --sem-bad-bg: #fff0f0;
+  --sem-bad-line: #ffc9c9;
+  --sem-ok: #2b8a3e;
+  --sem-ok-bg: #d3f9d8;
+  --sem-watch: #f59f00;      /* the noteworthy amber: rules, carets */
+  --sem-watch-strong: #f08c00;
+  --sem-watch-ink: #e8590c;  /* amber TEXT, which has to be darker to read */
+  --sem-watch-ink-2: #b35309;
+  --sem-watch-bg: #fff9db;
+  --sem-watch-bg-2: #fff4e6;
+  --sem-watch-line: #ffe066;
+  --c-baseline-bg: #f8f5ff;  /* the personal-baseline violet's own tint */
+  --c-link: #1c7ed6;         /* an OUTBOUND link (a citation) — the one blue in the app */
+
+  /* One height for every control that sits on a row with another control: the small
+     plate (timeline filters, section-head buttons) and the collapsing search field. It
+     is the small plate's own natural height, promoted to a token — the search field was
+     visibly taller than the "+ Add immunization" button beside it, because an input's
+     line box and a button's are not the same thing at the same font size. Neither box
+     grows to hold its text now; both are told what tall means. */
+  --ctl-h: 1.7rem;
+
+  /* And ONE gap between controls on such a row. The search field's expansion has to put
+     the same space between the section rule and its button, its button and its field, and
+     its field and the button after it — three spaces that must be one measurement, since
+     the field grows between them and any mismatch is visible mid-animation. The field
+     can't read its container's flex `gap`, so the container and the field both read
+     this. */
+  --ctl-gap: 0.75rem;
+
+  --font-body: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+  --font-display: Bahnschrift, 'DIN Alternate', 'Segoe UI Semibold', var(--font-body);
+  --font-serif: 'Sitka Heading', 'Sitka Text', Constantia, Georgia, serif;
+  --font-num: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+
+  color-scheme: light;
+  font-family: var(--font-body);
+  color: var(--c-ink);
+  background: var(--c-page);
+}
+
+/* ---------------------------------------------------------------------- dark theme
+
+   Every value above, restated for a dark ground. Two rules held while choosing them:
+
+   1. The ACCENT inverts its job. On white, graphite is the darkest thing on the page and
+      a filled graphite plate is the loudest control. On near-black that same graphite is
+      invisible, so the accent becomes a pale slate — still the one colour that means
+      "this is the app talking", now light-on-dark. `--c-accent-soft`/`--c-accent-line`
+      swap from "a tint above white" to "a lift above black".
+
+   2. The SEMANTIC colours keep their MEANING and change their VALUE. Out-of-range red on
+      #fff0f0 is unreadable on a dark panel, and the reference band's pale green vanishes
+      entirely — so each gets a lighter, less saturated ink for text and a very dark,
+      barely-tinted fill for backgrounds. Red is still red; it is a red that can be read.
+      (This is the one place the "semantic colours are not tokenised" rule from the top of
+      this file was amended, deliberately: they ARE tokens now, but only so the same
+      meaning survives the ground. A palette change still must not touch them.)
+
+   Applied by `data-theme="dark"` on <html>, set before React mounts (see main.jsx) so
+   there is no flash of the light theme on load. */
+:root[data-theme='dark'] {
+  --c-accent: #9db2c4;
+  --c-accent-strong: #c2d2e0;
+  --c-accent-soft: #222a33;
+  --c-accent-line: #3a4653;
+  --c-baseline: #a98bff;
+  --c-baseline-soft: #8b6cf0;
+  --c-ink: #e6ebf0;
+  --c-muted: #93a1b0;
+  --c-line: #2a323b;
+
+  --c-page: #11161b;
+  --c-surface: #171d23;
+  --c-surface-2: #1d242b;
+
+  --sem-bad: #ff8787;
+  --sem-bad-strong: #fa5252;
+  --sem-bad-bg: #331a1a;
+  --sem-bad-line: #5c2a2a;
+  --sem-ok: #69db7c;
+  --sem-ok-bg: #1b3324;
+  --sem-watch: #ffc94d;
+  --sem-watch-strong: #ffb340;
+  --sem-watch-ink: #ffc078;
+  --sem-watch-ink-2: #ffd8a8;
+  --sem-watch-bg: #2e2716;
+  --sem-watch-bg-2: #33291a;
+  --sem-watch-line: #5c4a1f;
+  --c-baseline-bg: #221d33;
+  --c-link: #74c0fc;
+
+  color-scheme: dark;
+}
+
+/* The rendered DICOM stage stays pure black in both themes — it is not chrome, it is the
+   image's own ground, and a radiologist's black is not a theme choice. */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  /* Native controls the app doesn't repaint — checkboxes, radios, the imaging slice
+     slider, progress bars — default to the browser's own blue-violet. One line points all
+     of them at the theme, which is the last place the pre-token violet was still showing
+     (the slider thumb under a graphite viewer being the obvious one). */
+  accent-color: var(--c-accent);
+}
+
+/* Tabbed sections (the controlled Tabs component, e.g. the Settings page). Kept
+   here in the single global stylesheet rather than a per-component CSS file. */
+.tabs__list {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--c-line);
+  margin-bottom: 16px;
+}
+
+/* A tab is a section head you can click, so it wears the same type as one: the
+   display face, uppercase and tracked, like .rsec__head and the timeline's month
+   labels. The active tab is marked by the accent rule under it, not by a weight
+   change — swapping weight on selection shifts every tab beside it. */
+.tabs__tab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 8px 14px;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  cursor: pointer;
+}
+
+.tabs__tab:hover {
+  color: var(--c-ink);
+}
+
+.tabs__tab--active {
+  color: var(--c-ink);
+  border-bottom-color: var(--c-accent);
+}
+
+.tabs__tab:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+
+.tabs__panel:focus {
+  outline: none;
+}

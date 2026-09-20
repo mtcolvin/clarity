@@ -1,0 +1,15 @@
+# Analysis engine (analysis.py)
+numpy==2.4.6
+scipy==1.17.1
+
+# API layer (api.py)
+fastapi==0.136.3
+uvicorn[standard]==0.49.0
+
+# Local DICOM viewer (dicom_store.py). pydicom (MIT) parses; Pillow (HPND/MIT-CMU)
+# encodes rendered slices to PNG; both are local-only, no system dependency. The viewer
+# degrades honestly if these are absent (the route reports available=false). NOTE:
+# JPEG2000-compressed DICOM additionally needs a decoder like pylibjpeg-openjpeg;
+# uncompressed/RLE studies render with these two alone.
+pydicom==3.0.2
+Pillow==12.3.0

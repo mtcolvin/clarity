@@ -1,0 +1,104 @@
+# Publish the static demo to THIS repository's GitHub Pages site.
+#
+# Deliberately self-contained: it deploys from this repo to this repo's Pages site, so
+# the demo never enters the personal site's repository and never becomes part of that
+# site's build. The site just links to it.
+#
+# The demo record is generated here, from synthetic.py, on every run — the demo store is
+# gitignored and is not in this repository. That is the point rather than an
+# inconvenience: there is no committed data for this workflow to publish, so no mistake
+# in it can put a real record on the internet. build_static_demo.py refuses to run
+# against anything but a demo store and re-checks the backend's own demo marker before
+# capturing a byte, which holds here exactly as it does locally.
+name: demo
+
+on:
+  push:
+    branches: [main]
+    # Documentation-only commits do not change the demo, and every run republishes the
+    # whole site. Narrow it to what actually affects the output.
+    paths:
+      - '**.py'
+      - 'frontend/**'
+      - 'requirements.txt'
+      - 'schema.sql'
+      - '.github/workflows/demo.yml'
+  workflow_dispatch:        # and on demand, from the Actions tab
+
+# Allow one publish at a time; a newer commit supersedes an in-flight run rather than
+# racing it to the same destination.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+          npm ci --prefix frontend
+
+      - name: Run the test suite
+        # A broken demo is worse than a stale one, and this is the last point at which
+        # that is cheap to notice. Includes the check that the crawler's filenames and
+        # the client's agree, which is the failure that would publish empty pages.
+        run: pytest -q
+
+      - name: Seed the invented record
+        run: python -m demo_store_setup
+
+      - name: Build the static demo
+        run: python build_static_demo.py --out static-demo
+
+      - name: Verify the built artifact renders
+        # Not a formality. Everything above can succeed and still produce a site that is
+        # blank in a browser — a wrong base path, a snapshot the client cannot address.
+        # This serves the real output and mounts every page against it.
+        run: |
+          python build_static_demo.py --out static-demo --serve 8080 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8080/ >/dev/null && break
+            sleep 1
+          done
+          cd frontend
+          npx vite build --ssr probe/smoke.jsx --outDir probe/.out --mode static --logLevel error
+          node probe/.out/smoke.js
+        env:
+          VITE_STATIC_DEMO: '1'
+          VITE_API_BASE: http://127.0.0.1:8080/api
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: static-demo
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
