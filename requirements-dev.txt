@@ -1,0 +1,6 @@
+# Development / test extras. Install ONLY for running the test suite:
+#     pip install -r requirements-dev.txt
+#
+# Not needed to run the app (requirements.txt).
+
+pytest==9.1.1

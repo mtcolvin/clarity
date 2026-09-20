@@ -1,0 +1,69 @@
+# SQLite database (created at runtime) and its WAL sidecar files
+health.db
+health.db-wal
+health.db-shm
+# Pre-migration backups (a full copy of the medical DB — never commit/push)
+health.db.bak*
+
+# Privacy gateway audit log — local-only record of handoffs; never leaves the
+# machine. Wildcard covers sidecars like the .pre-trim backup (2026-07-13 trim
+# of test-pollution entries).
+gateway_audit.log*
+
+# Local secrets (export-handoff provider API key). Loaded into the backend
+# process only (env_local.py at startup) — deliberately NOT a global env var,
+# so no other process (e.g. Claude Code) inherits the key. Never commit.
+.env.local
+
+# Sweep baselines — local endpoint snapshots (contain response bodies = health
+# data shape). Canonical refactor-safety baseline; never commit.
+.sweep/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Local DICOM imaging store — medical images, never committed/synced (like health.db)
+imaging_store/
+# (includes the disposable .scan-cache.json the scanner writes there)
+
+# Full imaging-CD archive (reports, IHE_PDI web renditions, DICOMDIR manifests).
+# Medical records — never committed/synced, same as health.db and imaging_store.
+# Kept SEPARATE from imaging_store/ so the DICOM scanner doesn't walk thousands of
+# non-DICOM files on every folder-signature check.
+imaging_archive/
+
+# Source documents dropped in for import (hospital records, discharge summaries,
+# scanned PDFs). These carry the WORST of the PII the charter names — name, DOB,
+# MRN, ordering physician, facility — in unfiltered prose, and unlike health.db
+# they arrive ad hoc with whatever name the source used, so they cannot be covered
+# by a specific filename rule. Ignored as a DIRECTORY so anything staged here is
+# out of git by default rather than by remembering.
+# NEAR MISS worth recording: 3 hospital PDFs (25 MB, full record incl. DOB and
+# record number) sat untracked and unignored in "temp folder/" while `git add -A`
+# was being used in this same session. They escaped only because they were added
+# after the last one ran.
+temp folder/
+temp-folder/
+inbox/
+
+# Split-up clinical documents (docstore.py) — one PDF + text sidecar per document,
+# derived from the source hospital bundles by the offline ingest. Medical records with
+# the patient's name/DOB/record number on every page; never committed or synced, same
+# as health.db, imaging_store/ and imaging_archive/. Disposable: rebuilt from source.
+documents_store/
+
+# Optional alternative Tesseract models (e.g. tessdata_best) if you point
+# HEALTH_TESSDATA at them. Measured as no better than the stock models on this corpus,
+# so not used by default — but downloadable third-party data either way, never committed.
+tessdata/
+
+# The demo store — an invented record, rebuilt on demand by demo.bat.
+demo_store/
+
+# Built static demo (build_static_demo.py --out static-demo). Generated, disposable, and
+# ~8 MB of snapshot files; rebuild it rather than commit it. Its CONTENTS are entirely
+# synthetic (the script refuses to run against anything but the demo store), so this is a
+# repo-hygiene rule, not a privacy one.
+static-demo/

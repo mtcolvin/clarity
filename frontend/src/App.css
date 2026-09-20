@@ -1,0 +1,5765 @@
+.app {
+  /* Shared vertical page padding, so every section starts at the same distance below the
+     app header. Imaging previously trimmed this to 1rem and everything else used 2rem,
+     which made the two pages visibly inconsistent; 1.5rem splits the difference. Exposed
+     as a variable because the imaging pane's fixed height has to subtract it (see .dcm). */
+  --page-pad-y: 1.5rem;
+  /* Height of the persistent app header. Declared HERE (not per-page) so any full-height
+     pane can subtract it: it was previously defined only on .timeline, so the imaging
+     pane's calc() referenced an undefined variable, became invalid, and silently lost its
+     height — the page then grew to content height and scrolled. The timeline overrides
+     this with a measured pixel value at runtime. */
+  --app-header-h: 3.5rem;
+  /* 820px was sized for a single column of cards. The Metrics page is now two columns
+     (rail + record), and at 820 the record had ~500px to hold a chart, a table and its
+     legend — visibly squeezed. Individual prose blocks that need a shorter measure set
+     their own max-width; this is the outer bound, not the reading width. */
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--page-pad-y) 1.25rem 4rem;
+}
+
+/* ---- Site-wide disclosure chevron -------------------------------------------------
+   Every <details>/<summary> in the app gets the SAME right-edge chevron as the timeline
+   month headers: points down when open, rotates to point right when collapsed. The glyph
+   is the exact path from icons.jsx's ChevronIcon (M6 9l6 6 6-6), drawn here via a CSS
+   mask so it inherits a uniform grey and matches the React version pixel-for-pixel — the
+   button-based month header and these native disclosures then read as one affordance.
+   Native markers (Chrome/Safari triangle, Firefox list marker) are removed. Positioned
+   absolutely so it never disturbs a summary's existing layout; padding-right reserves
+   its space. Component rules still set each summary's own color/size/cursor. */
+details > summary {
+  position: relative;
+  padding-right: 1.4rem;
+  list-style: none; /* Firefox default disclosure marker */
+}
+
+details > summary::-webkit-details-marker {
+  display: none; /* Chrome/Safari default triangle */
+}
+
+details > summary::after {
+  content: '';
+  position: absolute;
+  right: 0.1rem;
+  top: 50%;
+  width: 1rem;
+  height: 1rem;
+  background-color: var(--c-muted);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  /* Collapsed (default): point right. Open: point down. */
+  transform: translateY(-50%) rotate(-90deg);
+  transition: transform 0.15s;
+}
+
+details[open] > summary::after {
+  transform: translateY(-50%) rotate(0);
+}
+
+h1 {
+  font-size: 1.5rem;
+  margin: 0 0 1.25rem;
+}
+
+.muted {
+  color: var(--c-muted);
+}
+
+.small {
+  font-size: 0.85rem;
+}
+
+.error {
+  background: var(--sem-bad-bg);
+  border: 1px solid var(--sem-bad-line);
+  color: var(--sem-bad);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+}
+
+.empty {
+  border: 1px dashed var(--c-accent-line);
+  border-radius: 8px;
+  padding: 2rem;
+  text-align: center;
+  background: var(--c-surface);
+}
+
+/* ONE form style, used by every form in the app (add/edit reading, the metric modals,
+   an event, a condition, a profile measurement) — a form that looked different per page
+   would be the same inconsistency this pass exists to remove. Standing on the page it's
+   a panel; inside a modal the panel is dropped (see .modal__body .form) since the dialog
+   is already the container. */
+.form {
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  padding: 1.1rem 1.25rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+/* One field after another, not an auto-fit grid. The grid packed fields by available
+   width rather than by meaning, so which field sat beside which changed with the viewport
+   and with the result type — Unit landed next to a checkbox on one render and next to Date
+   on the next. A single column reads in the order the fields were written, which is the
+   order you fill them in, and each field fills the form's own width, so the container is
+   what sets the measure rather than a number in here. */
+.form__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+
+/* A field label is the same "labelled fact" head as .stat__k and .rsec__head: display
+   face, uppercase, tracked. These labels are one or two words ("Metric", "Ref low"), which
+   is what makes the treatment work here and NOT in Settings, where a label is a full
+   phrase and tracked uppercase turns reading into decoding. */
+/* `row wrap`, not `column`: the label's text node and its "(optional)" span are siblings,
+   so a column put the qualifier on its own line — a wasted line per optional field once the
+   fields stacked. Wrapping keeps them on one line and every CONTROL is forced to a full-width
+   row beneath by the flex-basis rule below. */
+.form label {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: baseline;
+  column-gap: 0.4rem;
+  row-gap: 0.3rem;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+
+/* Everything that isn't label text takes its own full-width row under the label. */
+.form label > input,
+.form label > select,
+.form label > textarea,
+.form label > .form__bound,
+.form label > .form__hint {
+  flex: 0 0 100%;
+}
+
+/* The VALUE inside a field goes back to the body/mono face at a readable size — only the
+   label carries the uppercase treatment. */
+.form input,
+.form select,
+.form textarea {
+  padding: 0.45rem 0.55rem;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--c-ink);
+  background: var(--c-surface);
+  border: 1px solid var(--c-accent-line);
+  border-radius: 3px;
+}
+
+/* A number or a date is a FIGURE — same mono face as the readings table, the chart ticks
+   and the settings inputs, so the value you type matches the value you'll read back. */
+.form input[type='number'],
+.form input[type='date'] {
+  font-family: var(--font-num);
+}
+
+.form input:focus-visible,
+.form select:focus-visible,
+.form textarea:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 1px;
+}
+
+.form .optional,
+.form .muted {
+  color: var(--c-muted);
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.form input:disabled,
+.form select:disabled {
+  background: var(--c-accent-soft);
+  color: var(--c-muted);
+  border-color: var(--c-line);
+  cursor: not-allowed;
+}
+
+/* The checkbox row is the one label that ISN'T a stacked label-over-field: it reads as a
+   sentence, so it keeps the body face and puts the box beside the words rather than
+   above them. */
+/* Selector carries the element too: `.form label` sets the uppercase label treatment at
+   equal-or-higher specificity, so a bare `.form__check` lost every reset it declared. */
+.form label.form__check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  letter-spacing: normal;
+  text-transform: none;
+  font-weight: 400;
+}
+
+/* Beats `.form label > input`'s full-width row above — a checkbox belongs BESIDE its
+   sentence, not on a line of its own. */
+.form label.form__check > input {
+  flex: 0 0 auto;
+}
+
+/* The form's own heading line ("New event", "Editing the 2026-06-18 reading") — the ruled
+   section head, so a form standing on a page announces itself like every other section. */
+.form__editing {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 1rem;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-ink);
+}
+
+.form__editing::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--c-line);
+}
+
+/* Bound = a small operator dropdown next to a ref value input (for censored
+   normal ranges, e.g. '≤10'). The value is the primary input; the operator is
+   compact and unobtrusive. */
+.form__bound {
+  display: flex;
+  gap: 4px;
+}
+
+.form__bound input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.form__bound-op {
+  flex: 0 0 auto;
+  width: 3rem;
+  padding: 0.45rem 0.3rem;
+}
+
+.form__actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+/* Submit is the primary plate, Cancel the outlined one — the same pair as
+   "+ Add reading" / "Manage metric" and Settings' Save / Reset. */
+.form__actions button {
+  color: var(--c-surface);
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+}
+
+.form__actions button:hover:not(:disabled) {
+  background: var(--c-accent-strong);
+  border-color: var(--c-accent-strong);
+}
+
+.form__actions button:disabled {
+  color: var(--c-muted);
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent-line);
+  cursor: default;
+}
+
+.form__cancel {
+  color: var(--c-accent) !important;
+  background: var(--c-surface) !important;
+  border-color: var(--c-accent-line) !important;
+}
+
+.form__cancel:hover {
+  background: var(--c-accent-soft) !important;
+  border-color: var(--c-accent) !important;
+}
+
+.form__error {
+  margin: 0 0 0.85rem;
+  color: var(--sem-bad);
+  font-size: 0.9rem;
+}
+
+/* Inline hint under a field (e.g. "this is a computed metric — add its inputs"). Resets
+   the label's uppercase tracking — it's a sentence, not a label. */
+.form__hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  line-height: 1.35;
+  color: var(--c-muted);
+}
+
+.readings {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1.5rem;
+  font-size: 0.9rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+}
+
+.readings th,
+.readings td {
+  text-align: left;
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.readings th {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--c-muted);
+}
+
+.readings tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.readings__actions {
+  display: flex;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
+/* On a TABLE row the same class lands on a <td>, and `display: flex` there replaces
+   `table-cell` — the cell stops participating in the row, so its buttons rode up to the
+   top and its bottom border sat at a different height from the rest of the row (visible on
+   any condition with two lines of notes). Inside a table the cell stays a cell and the
+   buttons flow inline, right-aligned and vertically centred. The flex rule above still
+   applies where the class is on a div (the timeline's event entry). */
+td.readings__actions {
+  display: table-cell;
+  vertical-align: middle;
+  text-align: right;
+  white-space: nowrap;
+}
+
+td.readings__actions > button + button {
+  margin-left: 0.4rem;
+}
+
+/* Row actions are quiet text links, not buttons: there is a pair on every row, and as
+   filled pills they drew more attention than the readings they act on. The type resets
+   are load-bearing — one of these rows reuses .metrics__rename (Collections' Edit), which
+   now carries the large-button plate's uppercase/tracking/weight, and without unwinding
+   all three that row would shout where its neighbours whisper. */
+.readings__actions button {
+  padding: 0.2rem 0.35rem;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--c-accent);
+  background: none;
+  border: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.readings__actions button:hover:not(:disabled) {
+  color: var(--c-accent-strong);
+}
+
+.readings__actions button:disabled {
+  color: var(--c-muted);
+  text-decoration: none;
+  cursor: default;
+}
+
+/* The armed delete keeps its warning colour — it's the one destructive step here. */
+.readings__actions button.danger {
+  color: var(--sem-bad);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------- native selects
+
+   A <select>'s POPUP is drawn by the OS, so most of it is out of reach — but the parts
+   Chromium does honour are exactly the ones that were wrong: an <optgroup> label renders
+   ITALIC by default, which is the only italic text in an app whose headings are a tracked
+   display face. These rules bring the popup as close to the app's own type as the
+   platform allows, and stop short of pretending a custom dropdown is there.
+
+   Scoped to `select` rather than applied globally: `option`/`optgroup` exist nowhere else,
+   but naming the parent keeps it obvious that this is dropdown styling. */
+select optgroup {
+  font-style: normal;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  background: var(--c-surface);
+}
+
+/* Options are CONTENT, so they stay in the body face — and are re-stated here because a
+   browser otherwise inherits the optgroup's styling into its children. */
+select option {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--c-ink);
+  background: var(--c-surface);
+}
+
+/* The closed control itself, wherever it isn't already styled by a form or a toolbar. */
+.picker {
+  display: inline-block;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+.picker select {
+  margin-left: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: var(--c-ink);
+  background: var(--c-surface);
+  border: 1px solid var(--c-accent-line);
+  border-radius: 3px;
+}
+
+/* Pill variant: the native <select> sits transparent over a styled label, so the
+   browser's own list, grouping and keyboard behaviour are all still there — only the
+   closed-state appearance changes. Used where a heading already names the metric. */
+.picker--pill {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 0;
+}
+
+.picker__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--c-muted);
+  border: 1px solid var(--c-accent-line);
+  border-radius: 999px;
+}
+
+.picker__caret {
+  font-size: 0.62rem;
+}
+
+.picker--pill select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.picker--pill:hover .picker__pill,
+.picker--pill select:focus-visible + .picker__pill,
+.picker--pill:focus-within .picker__pill {
+  color: var(--c-accent);
+  border-color: var(--c-accent);
+}
+
+.chart {
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+  padding: 1rem 1rem 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Optional caption row inside a .chart card (e.g. the current-weight line above
+   the weight trend), so a value and its chart read as one container. */
+.chart__header {
+  margin-bottom: 0.5rem;
+}
+
+/* Linear/Log Y-scale switch — a quiet segmented control, top-right, shown only
+   for outlier-heavy metrics (see showLogToggle). */
+/* One segmented control, hairline-boxed, in the same small display-face lettering as
+   the section heads — so it reads as chart furniture rather than a pair of buttons. */
+/* The scale control's row: the warning (when log is on) at the left, the switch at the
+   right. One row rather than a banner above the chart — the notice is a caption on the
+   control that caused it, and stacking it as a block would make a caveat louder than the
+   chart it qualifies. */
+.chart__scale-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ctl-gap);
+  margin-bottom: 0.5rem;
+}
+
+/* A log axis breaks the one thing a reader carries between charts — that vertical
+   distance means amount. Amber (this app's "worth a look"), quiet, and gone the moment
+   the axis is linear again. It is deliberately NOT the .metrics__advisory block: that
+   shape is for a standing property of the metric (NLR is not a standard test), whereas
+   this is a property of how you are currently LOOKING at it. */
+.chart__logwarn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 auto 0 0;
+  padding: 0.22rem 0.5rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--sem-watch-ink-2);
+  background: var(--sem-watch-bg);
+  border: 1px solid var(--sem-watch-line);
+  border-radius: 3px;
+}
+
+.chart__logwarn strong {
+  color: var(--sem-watch-ink);
+  font-weight: 600;
+}
+
+/* The shared glyph defaults to the accent (see .baseline__icon); in here it belongs to
+   the warning, the same way it takes the violet inside a baseline callout. */
+.chart__logwarn .baseline__icon {
+  color: var(--sem-watch-ink);
+}
+
+.chart__scale-toggle {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  width: fit-content;
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.chart__scale-toggle button {
+  font-family: var(--font-display);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.6rem;
+  border: none;
+  background: none;
+  color: var(--c-muted);
+  cursor: pointer;
+}
+
+.chart__scale-toggle button + button {
+  border-left: 1px solid var(--c-line);
+}
+
+.chart__scale-toggle button:hover {
+  color: var(--c-ink);
+}
+
+.chart__scale-toggle button.active {
+  background: var(--c-accent);
+  color: var(--c-surface);
+}
+
+/* Empty weight chart: a grayed, chart-sized box prompting the first measurement,
+   with the hint text centered over the chart area. */
+.chart--empty {
+  background: var(--c-accent-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+}
+
+.chart--empty__text {
+  font-style: italic;
+}
+
+.flags {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.flag {
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-left-width: 4px;
+  border-radius: 6px;
+  padding: 0.6rem 0.85rem;
+}
+
+/* The head line: severity (type) + date, tight on the left. The description
+   (.flag__msg) drops to its own line below it. Scoped to a DIRECT child so the
+   condensed history-group summaries (which nest .flag__msg inside a <summary>
+   next to the disclosure triangle) keep their inline layout. */
+.flag__head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 0.3rem;
+}
+
+.flag > .flag__msg {
+  display: block;
+}
+
+.flag--high {
+  border-left-color: var(--sem-bad-strong);
+}
+
+.flag--watch {
+  border-left-color: var(--sem-watch-strong);
+}
+
+.flag--info {
+  border-left-color: var(--c-accent);
+}
+
+.badge {
+  font-family: var(--font-display);
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.45rem;
+  border-radius: 3px;
+  background: var(--c-accent-soft);
+  border: 1px solid var(--c-accent-line);
+  color: var(--c-ink);
+}
+
+.flag--high .badge,
+.badge--high {
+  background: var(--sem-bad-bg);
+  color: var(--sem-bad);
+}
+
+.flag--watch .badge,
+.badge--watch {
+  background: var(--sem-watch-bg);
+  color: var(--sem-watch-ink);
+}
+
+.flag__kind {
+  font-family: ui-monospace, monospace;
+  color: var(--c-ink);
+  font-size: 0.85rem;
+}
+
+/* Top bar: title + gear. */
+.app__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--c-ink);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: var(--c-accent-soft);
+  border-color: var(--c-line);
+  color: var(--c-accent);
+}
+
+/* Settings view (its own page, reached from the gear). */
+.settings-page {
+  margin-top: 0.5rem;
+}
+
+.settings-page > h2 {
+  margin: 0.5rem 0 0.9rem;
+}
+
+.back-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--c-accent);
+  cursor: pointer;
+  font-size: 0.92rem;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+/* Adjustable settings form. A white panel on the page ground, hairline and squared
+   like the chart panel and the timeline's entry cards — the grey-on-grey box it used
+   to be read as a disabled region rather than the page's one editable surface. */
+.settings {
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  padding: 1.2rem 1.3rem;
+  margin: 0 0 1.5rem;
+}
+
+.settings__form {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.settings__row {
+  display: grid;
+  gap: 0.25rem;
+}
+
+/* Sentence case, not the uppercase tracking the section heads use: these labels are
+   full phrases ("Changes digest: recency window"), and tracked uppercase turns a phrase
+   into something you decode rather than read. */
+.settings__label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* A settings value is a FIGURE, so it takes the same mono face as every other number
+   in the app (chart ticks, reading values, dates). */
+.settings__input {
+  width: 8rem;
+  padding: 0.4rem 0.5rem;
+  font-family: var(--font-num);
+  font-size: 0.95rem;
+  color: var(--c-ink);
+  border: 1px solid var(--c-accent-line);
+  border-radius: 3px;
+}
+
+.settings__input:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 1px;
+}
+
+.settings__desc {
+  margin: 0;
+}
+
+/* A settings panel made of PROSE rather than fields. In the registry-driven form the space
+   between rows comes from the control that sits between a label and its description; with
+   no control the rows close up against each other and read as one block of text. This adds
+   the separation the inputs were providing, and nothing else — the label and description
+   keep the type they have everywhere else in Settings. */
+.settings--prose {
+  display: grid;
+  gap: 1.15rem;
+}
+
+/* A READING MEASURE. The registry form's descriptions caption a field, so they inherit
+   their width from the panel and it doesn't matter; here the text IS the content, and a
+   panel-wide line runs to about 120 characters — roughly twice what the eye tracks back
+   from comfortably. `ch` rather than a pixel width so it follows the type, not the layout. */
+.settings--prose .settings__desc,
+.settings--prose .settings__intro {
+  max-width: 74ch;
+}
+
+.settings__intro {
+  margin: 0;
+  padding-bottom: 0.15rem;
+  border-bottom: 1px solid var(--c-line);
+}
+
+/* The export handoff's capability toggle — a plain checkbox row, not the
+   enum radio-group treatment (this isn't a multi-option choice). */
+.settings__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: fit-content;
+  font-size: 0.9rem;
+}
+
+.settings__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+
+/* Save is the primary plate, Reset the outlined one — the same pair as "+ Add reading"
+   and "Manage metric" (both get the shape from the shared rule near .btn-primary). */
+.settings__actions button[type='submit'] {
+  color: var(--c-surface);
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+}
+
+.settings__actions button[type='submit']:hover:not(:disabled) {
+  background: var(--c-accent-strong);
+  border-color: var(--c-accent-strong);
+}
+
+.settings__reset {
+  color: var(--c-accent);
+  background: var(--c-surface);
+  border-color: var(--c-accent-line);
+}
+
+.settings__reset:hover {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent);
+}
+
+/* Settings panel group heading — the app's ruled section head (.rsec__head), so a
+   group inside a form and a section on the record page announce themselves the same way.
+   Used by the audit log's headings too. */
+.settings__group,
+.coverage__section h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.5rem 0 0.7rem;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-ink);
+}
+
+.settings__group::after,
+.coverage__section h4::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--c-line);
+}
+
+/* Categorical (enum) setting: radio group of the server's option list. Each
+   option shows its own label + description so the engine's posture is visible. */
+.settings__options {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.15rem 0;
+}
+
+.settings__option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.5rem;
+  align-items: start;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--c-line);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.settings__option:hover {
+  border-color: var(--c-accent-line);
+}
+
+/* The CHOSEN option is marked on the card, not only in the radio dot — with one option
+   per provider and a paragraph of policy under each, a 13px dot was the only thing
+   saying which one is live. */
+.settings__option:has(input:checked) {
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
+}
+
+/* Availability-gated option: visibly present but not selectable (e.g. Ollama not
+   running). Dimmed + not-allowed cursor; we disable, never hide. */
+.settings__option--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.settings__option--disabled input[type='radio'] {
+  cursor: not-allowed;
+}
+
+.settings__option input[type='radio'] {
+  margin-top: 0.2rem;
+}
+
+.settings__option-label {
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+/* Description spans the full second column, under the label (not the radio). */
+.settings__option-desc {
+  grid-column: 2;
+  margin: 0;
+}
+
+/* Per-metric personal-baseline control. All three states share ONE violet
+   callout container (background/border/radius — the same "not the
+   deterministic engine" violet family as .export__block below); the visual-weight
+   difference between them is padding and content, not a different color per
+   state. The quiet link — now shown far more broadly, any metric with enough
+   numeric readings to be computable, not just established candidates — uses
+   tighter padding since it appears across dozens of metric pages at rest;
+   the suggestion banner and active-mode callout use the fuller padding since
+   each is a deliberate, less-frequent surface (an active pitch, or a
+   confirmed decision). */
+.baseline {
+  background: var(--c-accent-soft); /* violet-0 */
+  border: 1px solid var(--c-accent-line); /* violet-3 */
+  border-left: 4px solid var(--c-baseline-soft); /* violet-4 — same accent rail as .export__block below it */
+  border-radius: 8px; /* match .export__block so the stacked pair reads as siblings */
+  padding: 0.9rem 1.1rem;
+  margin: 0.75rem 0;
+}
+
+/* Icon + multi-line text row (on-state description; reused by the future
+   global explainer). */
+.baseline__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+/* The shared inline icons draw with currentColor, so their colour is set here rather
+   than baked into each SVG (see components/icons.jsx). */
+.baseline__icon {
+  flex-shrink: 0;
+  color: var(--c-accent);
+}
+
+/* Inside a personal-baseline callout the glyph takes the baseline violet, matching
+   that surface's rule and the chart's baseline line — it marks the feature, so it
+   shouldn't dissolve into the app accent. */
+.baseline .baseline__icon {
+  color: var(--c-baseline);
+}
+
+/* Multi-line rows nudge the icon down to align with the first text line's
+   cap-height; the single-line quiet link centers instead (no offset). */
+.baseline__icon--offset {
+  position: relative;
+  top: 2px;
+}
+
+.baseline__divider {
+  border: none;
+  border-top: 0.5px solid var(--c-accent-line);
+  margin: 0.6rem 0;
+}
+
+.baseline__msg {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.baseline__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.7rem;
+}
+
+/* The popup's "Got it" sits bottom-right of the callout rather than left-
+   aligned under the text — a dismiss reads more naturally as a corner
+   affordance than as a peer to a suggestion's decision buttons. */
+.baseline__actions--end {
+  justify-content: flex-end;
+}
+
+/* Primary: a real state change (start/stop tracking against your own
+   baseline, or saving a note) — a bordered button, not a link. */
+.baseline__primary-btn,
+.baseline__secondary {
+  padding: 0.34rem 0.6rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+  background: var(--c-surface);
+  border: 1px solid var(--c-accent-line);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.baseline__primary-btn:hover,
+.baseline__secondary:hover {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent);
+}
+
+/* (.baseline__secondary shares the rule above — same plate, same states.) */
+
+/* Secondary: editing/adding a note is lightweight next to the primary
+   toggle — an underlined text-link, no border or background. The contrast is
+   intentional: toggling mode is a state change, editing a note isn't. */
+.baseline__link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--c-accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.baseline__note {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.baseline__note input {
+  flex: 1 1 14rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--c-accent-line);
+  border-radius: 5px;
+}
+
+/* The saved-note display (collapsed state) — the note text + an inline Edit
+   link, replacing the always-open input when a note already exists and isn't
+   currently being edited. */
+.baseline__note-display {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.baseline-tag {
+  font-style: italic;
+}
+
+/* The permanent personal-baseline explainer (Settings-page block) and the
+   auto-once welcome popup (Metrics page) — same violet callout, just with a
+   bit of extra breathing room since each sits at the top of denser content
+   (a settings group, or the picker row) rather than beside a specific
+   metric's controls. */
+/* Squared to 3px like every other panel in the app; the violet rail stays, because it
+   marks the personal-baseline feature rather than following the theme. */
+.baseline--explainer {
+  margin: 0.4rem 0 1.2rem;
+  border-radius: 3px;
+}
+
+/* Text of the export handoff's model-reasoning result (in ExportPanel's
+   .export__result block). Renamed from the removed interpretation tier's
+   .interp__text; pre-line preserves the closing disclaimer's paragraph break. */
+.export__result-text {
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Rendered Markdown from model output (src/markdown.jsx). Scoped to `.md` so it can't
+   restyle app chrome. `pre-line` is deliberately NOT used here: the renderer emits real
+   block elements, so preserving source newlines on top of them would double every gap. */
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+
+.md__p {
+  margin: 0 0 0.6rem;
+  line-height: 1.55;
+}
+
+.md__h {
+  margin: 0.9rem 0 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.md__list {
+  margin: 0 0 0.6rem;
+  padding-left: 1.25rem;
+}
+
+.md__list li {
+  margin-bottom: 0.25rem;
+  line-height: 1.55;
+}
+
+.md code {
+  padding: 0.05rem 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.86em;
+  background: var(--c-accent-soft);
+  border-radius: 3px;
+}
+
+/* A response attached to its send in the Settings audit list. */
+.audit__response {
+  margin: 0.6rem 0;
+  padding: 0.65rem 0.8rem;
+  background: var(--c-accent-soft);
+  border-left: 3px solid var(--c-baseline-soft);
+  border-radius: 0 4px 4px 0;
+  font-size: 0.88rem;
+}
+
+.audit__response-head {
+  margin-bottom: 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--c-accent-strong);
+}
+
+.audit__replied {
+  color: var(--sem-ok);
+}
+
+.audit__payload-wrap > summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--c-muted);
+}
+
+/* Multi-metric export header on the metric page (above the picker) + the full-picture
+   block on Home. A substantial section: title + lead + panel/selection rows. */
+.home__full-export {
+  margin: 0.5rem 0 0.75rem;
+}
+
+/* The export flow area, below the header — the picker/actions stay a clean header row and
+   the (taller) preview / metric-picker for a set renders here, full width. */
+.metrics__export-area {
+  margin: 0.25rem 0 0.75rem;
+}
+
+.metrics__export-area-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.6rem;
+}
+
+.metrics__multi-select {
+  margin: 0.4rem 0;
+  padding: 0.5rem 0.6rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+}
+
+.metrics__multi-select-filter {
+  width: 100%;
+  margin-bottom: 0.4rem;
+  padding: 0.3rem 0.45rem;
+}
+
+.metrics__multi-select-list {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.metrics__multi-select-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  padding: 0.1rem 0.15rem;
+}
+
+/* A collapsed per-metric group inside a multi-metric export preview, so a big payload
+   (a panel, or the full picture) stays reviewable instead of an endless flat dump. */
+.export__metric-group {
+  margin: 0.35rem 0;
+  border-left: 2px solid var(--c-line);
+  padding-left: 0.6rem;
+}
+
+.export__metric-group > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* Full-picture export: the editable radiology-report drafts, and the report text as it
+   appears in the faithful payload render. The editor is visually distinct from the payload
+   below it — one is a working copy you change, the other is what actually leaves. */
+.export__reports-edit {
+  margin: 0.6rem 0;
+  padding: 0.6rem 0.7rem;
+  background: var(--sem-watch-bg);
+  border: 1px solid var(--sem-watch-line);
+  border-radius: 6px;
+}
+
+.export__report {
+  margin: 0.5rem 0;
+}
+
+.export__report-head {
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-bottom: 0.2rem;
+}
+
+.export__report-edit {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--c-accent-line);
+  border-radius: 4px;
+  resize: vertical;
+}
+
+/* The outbound text. `pre-wrap` keeps the report's own line breaks (they carry its
+   structure) while still wrapping long lines instead of scrolling the page sideways. */
+.export__report-text {
+  margin: 0;
+  padding: 0.4rem 0.5rem;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A saved export result in Settings → External export: the model's response, collapsed. */
+.export-result-record {
+  margin: 0.4rem 0;
+  padding: 0.5rem 0.7rem;
+  background: var(--c-baseline-bg);
+  border: 1px solid var(--c-accent-line);
+  border-radius: 6px;
+}
+
+.export-result-record > summary {
+  cursor: pointer;
+}
+
+.export-result-record__scope {
+  font-weight: 600;
+}
+
+.export-result-record__output {
+  margin: 0.5rem 0 0.3rem;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+/* "Show the facts that were sent" — the sent bundle kept co-visible with the response
+   (temporal-severance fix), collapsed by default so it doesn't crowd the reasoning. */
+.export__sent {
+  margin: 0.85rem 0 0.3rem;
+  border-top: 1px solid var(--c-line);
+  padding-top: 0.6rem;
+}
+
+.export__sent > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--c-accent-strong);
+}
+
+/* The system instruction shown inside the preview's collapsed block. Monospace +
+   preserved newlines so the numbered rules read as the structured text they are,
+   not as one reflowed paragraph; scrolls in its own box so a long prompt can't
+   push the confirm controls off the screen. */
+.export__instruction {
+  margin: 0.5rem 0;
+  padding: 0.6rem 0.7rem;
+  max-height: 22rem;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--c-ink);
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+}
+
+/* The export handoff (CLAUDE.md "The export handoff") — ExportPanel.jsx.
+   Violet "not the deterministic engine" family (violet-0 bg / violet-3 border /
+   violet-4 left rail), its own namespace because the internal structure (a full
+   faithful payload render, a scroll-gated confirm) is genuinely different from a
+   single reasoning block. */
+.export__off {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.export__block {
+  margin-top: 0.75rem;
+  padding: 0.9rem 1rem;
+  background: var(--c-accent-soft);
+  border: 1px solid var(--c-accent-line);
+  border-left: 4px solid var(--c-baseline-soft);
+  border-radius: 8px;
+}
+
+.export__header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  color: var(--c-accent);
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Idle-state export trigger: the header row IS the clickable "start export"
+   control (the redundant sub-button was removed).
+   Button reset; the violet/bold visual comes from .export__header. */
+.export__header--trigger {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 0; /* cancel .export__header's 0.5rem so the trigger row matches the
+                       baseline quiet-link's height exactly */
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.export__header--trigger:hover {
+  color: var(--c-accent-strong);
+}
+
+/* The destination banner — who receives it, deliberately the FIRST thing in
+   the preview, above the scrolling payload (CLAUDE.md "Consent mechanics":
+   consent is to a specific external party, not just to "sending"). A
+   stronger tint than the rest of the block so it can't be mistaken for a
+   minor footnote. */
+.export__destination {
+  margin: 0 0 0.85rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--c-accent-line);
+  border: 1px solid var(--c-accent-line);
+  border-radius: 6px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.export__section {
+  margin: 0.9rem 0 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--c-muted);
+}
+
+.export__finding {
+  padding: 0.5rem 0.65rem;
+  margin-bottom: 0.4rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  font-size: 0.88rem;
+}
+
+.export__finding-detail {
+  margin: 0.25rem 0 0;
+  color: var(--c-muted);
+  font-size: 0.82rem;
+}
+
+/* excluded_fields/redactions, rendered only if non-empty — under Model A that
+   should never happen, so an amber warning (not the calm violet) is the
+   right weight when it does. */
+.export__warn {
+  margin: 0.6rem 0;
+  padding: 0.6rem 0.75rem;
+  background: var(--sem-watch-bg);
+  border: 1px solid var(--sem-watch-line);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+/* A data-changed-since-preview notice (the 409 path) — amber, same weight as
+   .export__warn, since it's the same "pay attention before you confirm" register. */
+.export__stale {
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--sem-watch-bg);
+  border: 1px solid var(--sem-watch-line);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.export__divider {
+  border: none;
+  border-top: 1px solid var(--c-accent-line);
+  margin: 0.9rem 0 0.75rem;
+}
+
+/* Scroll-gate sentinel — zero footprint, a manual getBoundingClientRect()
+   check target marking "the reader has reached the end of the payload." */
+.export__sentinel {
+  height: 1px;
+}
+
+.export__confirm-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* The result tier — deliberately a SEPARATE, standalone block (see
+   ExportPanel.jsx: this is NOT nested inside the workflow .export__block that
+   holds the trigger/preview/error states) so it reads unmistakably as its own
+   thing, not "more of the same panel." The violet + lightbulb recipe (carried
+   over from the removed InterpretationPanel) keeps one consistent meaning: this
+   is the model talking, not a cited fact. */
+.export__result {
+  margin-top: 0.75rem;
+  padding: 0.9rem 1rem;
+  background: var(--c-accent-soft);
+  border: 1px solid var(--c-accent-line);
+  border-left: 4px solid var(--c-baseline-soft);
+  border-radius: 8px;
+}
+
+.export__result-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  color: var(--c-accent);
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+/* The deterministic disclaimer — visually marked as STRUCTURAL (a divider +
+   smaller/muted/italic register), distinct from the model's own flowing
+   prose above it, so a reader can see this part is fixed app chrome, not
+   something the model happened to write. Always rendered, never conditional
+   on model output. */
+.export__disclaimer {
+  margin: 0.75rem 0 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--c-accent-line);
+  font-size: 0.82rem;
+  font-style: italic;
+  color: var(--c-ink);
+}
+
+/* "Recent external sends" (Settings) — the audit log's external entries,
+   rendered as collapsed <details> rows. Neutral register (this is app
+   chrome/record-keeping, not model output, so no violet), with the payload
+   as a scrollable verbatim block. */
+.audit {
+  margin-top: 1.5rem;
+}
+
+.audit__entry {
+  margin-bottom: 0.4rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  font-size: 0.86rem;
+}
+
+.audit__entry:hover {
+  border-color: var(--c-accent-line);
+}
+
+.audit__summary {
+  cursor: pointer;
+}
+
+/* The send's timestamp is the row's index — mono, so a column of them lines up and a
+   date reads as a date rather than as prose. */
+.audit__ts {
+  font-family: var(--font-num);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-muted);
+}
+
+.audit__failed {
+  color: var(--sem-bad-strong);
+  font-weight: 600;
+}
+
+/* An attempted-but-unserved send — same amber "pay attention" register as
+   .export__warn (bytes may have left even though nothing came back). */
+.audit__error-detail {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.65rem;
+  background: var(--sem-watch-bg);
+  border: 1px solid var(--sem-watch-line);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.audit__meta {
+  margin: 0.5rem 0 0.25rem;
+}
+
+.audit__payload {
+  margin: 0.25rem 0 0.25rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--c-accent-soft);
+  border: 1px solid var(--c-line);
+  border-radius: 3px;
+  font-family: var(--font-num);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  max-height: 20rem;
+  overflow: auto;
+}
+
+.coverage__section {
+  margin-top: 1.6rem;
+}
+
+/* 164 metrics in one column is a scroll, not a roster. Columns (not a grid) because the
+   rows are single lines of wildly different length and reading order stays top-to-bottom
+   within a column; `break-inside` keeps a metric and its badge on one line. The track
+   width is what decides the count, so it reflows instead of needing breakpoints. */
+.coverage__list {
+  columns: 20rem;
+  column-gap: 2rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.coverage__row {
+  break-inside: avoid;
+  padding: 0.22rem 0;
+  font-size: 0.86rem;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.coverage__metric {
+  color: var(--c-ink);
+}
+
+/* Metric-coverage roster badges (Settings → Metric coverage). The RCV badge
+   marks a metric carrying a seeded Reference Change Value coefficient — a small,
+   quiet pill so the roster still reads as a list, not a tag cloud. Violet to
+   echo the "computed/config" family without competing with a threshold's own
+   colouring. */
+.coverage__badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.02rem 0.34rem;
+  border-radius: 3px;
+  font-family: var(--font-display);
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  vertical-align: middle;
+}
+
+.coverage__badge--rcv {
+  color: var(--c-accent-strong);
+  background: var(--c-accent-soft);
+  border: 1px solid var(--c-accent-line);
+}
+
+/* Cross-metric "since your last reading" digest. */
+/* ------------------------------------------------------------------- home page
+
+   Home is one column of ruled sections (.rsec / .rsec__head, shared with the metric
+   record) opening on a strip of counts. No cards: the section rules and row hairlines
+   do the separating, the same way they do on the Metrics page. */
+
+/* The page grid: a wide main column for the flag list, a narrower side column for the
+   short pieces (recent movement, weight), and full-width rows for the counts strip and
+   the export. Full-width everything read as a stack of banners; this gives each section
+   a width its content actually wants. */
+.home {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  column-gap: 2.75rem;
+  align-items: start;
+}
+
+.home__top,
+.home__wide {
+  grid-column: 1 / -1;
+}
+
+/* Counts left, the page's one primary action right. Wraps rather than squeezing. */
+.home__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+/* The export button while its panel is open — pressed, not a second colour. */
+.btn-primary--active {
+  background: var(--c-accent-strong);
+  border-color: var(--c-accent-strong);
+}
+
+.home__main {
+  grid-column: 1;
+  min-width: 0;
+}
+
+.home__side {
+  grid-column: 2;
+  min-width: 0;
+}
+
+/* At-a-glance counts. Each cell is a .stat, so their top borders line up into one
+   continuous rule across the strip. */
+.home__facts {
+  /* flex:1 so it gets the header's spare width — inside a flex row it would otherwise
+     shrink to its content and auto-fit would collapse the counts into one column. */
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 190px));
+  justify-content: start;
+  gap: 0 2.5rem;
+}
+
+/* One column below the breakpoint: at this width the side column is too narrow for a
+   chart, and two columns of ~300px read worse than one of 600. */
+@media (max-width: 900px) {
+  .home {
+    grid-template-columns: 1fr;
+  }
+  .home__main,
+  .home__side {
+    grid-column: 1;
+  }
+}
+
+/* The counts are the page's opening figures, so they take the display face at hero
+   size — the same treatment the metric rail gives its latest reading. */
+.home__facts .stat__v {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+/* One flag per row: metric name, severity, date on the head line; the engine's own
+   message beneath. The whole row is the button that jumps to that metric. */
+/* Capped and scrollable: expanded, this list runs to dozens of rows and would push
+   everything below it off the page. `overscroll-behavior: contain` keeps a wheel that
+   reaches the end of the list from carrying on into the page scroll. */
+.ovlist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 26rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.ovrow + .ovrow {
+  border-top: 1px solid var(--c-line);
+}
+
+.ovrow__pick {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0.6rem 0.5rem 0.6rem 0;
+  text-align: left;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.ovrow__pick:hover {
+  background: var(--c-accent-soft);
+}
+
+.ovrow__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ovrow__metric {
+  font-family: var(--font-display);
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.ovrow__date {
+  font-family: var(--font-num);
+  font-size: 0.75rem;
+  color: var(--c-muted);
+  white-space: nowrap;
+}
+
+.ovrow__msg {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--c-muted);
+}
+
+.ovlist__more {
+  margin-top: 0.6rem;
+  padding: 0;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 0.82rem;
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+/* "Since your last reading" — plain hairline rows; a reading that crossed into or out
+   of its reference range keeps an amber rule, the app's one caution colour. */
+.changes__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.change {
+  padding: 0.5rem 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.change + .change {
+  border-top: 1px solid var(--c-line);
+}
+
+.change--flagged {
+  padding-left: 0.7rem;
+  border-left: 2px solid var(--sem-watch);
+}
+
+/* The current weight sits in the chart panel's header row. */
+.profile-summary__line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  margin-bottom: 0.4rem;
+}
+
+/* Current flags (left) + notable history (right), side by side. Each column
+   takes half; they stack on narrow viewports. min-width:0 lets long flag
+   messages wrap instead of forcing the row wider. */
+.findings-row {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.findings-row > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .findings-row {
+    flex-direction: column;
+    gap: 0;
+  }
+}
+
+.current-flags {
+  margin: 1rem 0;
+}
+
+.current-flags h3,
+.history h3 {
+  margin: 0 0 0.5rem;
+  display: flex;
+  align-items: center;
+}
+
+.history {
+  margin: 1rem 0;
+}
+
+/* ⓘ hover/focus hint (InfoHint) — tucks a section's descriptive prose behind a
+   small info icon in the heading. The bubble is a dark tooltip anchored under
+   the icon; shows on hover of the whole .hint and on keyboard focus of the
+   trigger. Pure presentation. */
+.hint {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 0.35rem;
+}
+
+.hint__trigger {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: help;
+  color: var(--c-muted);
+  display: inline-flex;
+  line-height: 0;
+}
+
+.hint__trigger:hover,
+.hint__trigger:focus-visible {
+  color: var(--c-accent);
+}
+
+.hint__bubble {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  width: max-content;
+  max-width: 17rem;
+  padding: 0.45rem 0.6rem;
+  background: var(--c-accent-strong);
+  color: var(--c-surface);
+  font-size: 0.76rem;
+  font-weight: 400;
+  line-height: 1.45;
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+
+.hint:hover .hint__bubble,
+.hint__trigger:focus-visible + .hint__bubble {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* A condensed (kind, direction) group: the li holds a <details> instead of the
+   default badge/kind/msg grid, so opt out of the grid and lay the summary out
+   inline. */
+.history__group {
+  display: block;
+}
+
+.history__group summary {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  cursor: pointer;
+}
+/* The right-edge chevron + marker hiding are inherited from the site-wide
+   `details > summary` rule (top of this file) — no per-group glyph needed. */
+
+.history__detail {
+  margin: 0.6rem 0 0;
+  padding-left: 1.4rem;
+}
+
+.history__omitted {
+  margin: 0.4rem 0 0;
+  padding-left: 1.4rem;
+}
+
+/* ------------------------------------------------------------------ app shell */
+
+/* Persistent top bar across every route. */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.app-header__menu {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--c-ink);
+  cursor: pointer;
+}
+
+.app-header__menu:hover {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent-line);
+  color: var(--c-accent);
+}
+
+/* Wordmark: the display face, uppercase and letterspaced. text-transform rather than
+   capitals in the markup, so the accessible name stays "Health tracker". */
+.app-header__title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+/* Drawer + backdrop. */
+.nav-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.nav-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 31;
+  height: 100%;
+  width: 17rem;
+  max-width: 80vw;
+  background: var(--c-surface);
+  border-right: 1px solid var(--c-line);
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+  padding: 1.1rem 0.85rem;
+  overflow-y: auto;
+}
+
+.nav-drawer__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
+/* A nav entry is a section NAME, so it takes the label type the section heads use — the
+   drawer then reads as an index of the record rather than a list of app screens. */
+.nav-drawer__link {
+  display: block;
+  padding: 0.6rem 0.7rem;
+  border-radius: 3px;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  text-decoration: none;
+}
+
+.nav-drawer__link:hover {
+  background: var(--c-accent-soft);
+  color: var(--c-ink);
+}
+
+/* Active section marker (NavLink isActive). The filled LEFT RULE is the same "you are
+   here" mark the Documents index and the imaging series list use. The old pale-BLUE fill
+   was the last stray hue in the app — blue belongs to no part of this palette. */
+.nav-drawer__link--active {
+  background: var(--c-accent-soft);
+  color: var(--c-ink);
+  box-shadow: inset 3px 0 0 var(--c-accent);
+}
+
+/* ------------------------------------------------------------------------- loading
+
+   One placeholder for every wait in the app (components/shell/Loading.jsx). It was
+   fifteen separate `<p class="muted">Loading…</p>`s: some named what they were fetching
+   and some didn't, and all of them read like a line of content rather than a state. */
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+  padding: 1.6rem 0;
+}
+
+.loading__label {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+
+/* NOT a progress bar: none of these fetches report progress, so a bar that appeared to
+   know how far along it was would be lying about the one thing it looks like it says. It
+   sweeps to show the app is alive, and nothing more. */
+.loading__bar {
+  display: block;
+  width: 9rem;
+  height: 2px;
+  overflow: hidden;
+  background: var(--c-line);
+}
+
+.loading__bar > span {
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: var(--c-accent);
+  animation: loading-sweep 1.1s ease-in-out infinite;
+}
+
+@keyframes loading-sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+
+/* Reduced motion: hold the bar still and part-filled rather than removing it — the
+   element is the "still working" signal, and taking it away would read as finished. */
+@media (prefers-reduced-motion: reduce) {
+  .loading__bar > span {
+    animation: none;
+    width: 100%;
+    opacity: 0.35;
+  }
+}
+
+/* A wait INSIDE an already-open panel (an expanded collection's analytes, the export
+   preview): one quiet line, since the full block would outweigh the content it stands
+   in for. */
+.loading--inline {
+  margin: 0;
+  padding: 0;
+  font-size: 0.8rem;
+  color: var(--c-muted);
+}
+
+/* ----------------------------------------------------------------- add/edit modal */
+
+/* The app's ONE primary button: filled accent, used for the single most important
+   action on a page (add a reading, export the full picture). Anything else is secondary
+   or a text link, so there is never more than one of these competing per view. */
+/* Metrics page header — a proper large page title (like Settings/Profile, but prominent). */
+.metrics__page-title {
+  margin: 0 0 1rem;
+  font-size: 1.9rem;
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------- metric rail + record
+
+   The Metrics page is two columns: a sticky RAIL naming the metric and holding its
+   actions, and the RECORD beside it — the chart, findings and readings as ruled
+   sections with no card chrome. The rail is what makes the record safe to strip
+   back: identity, units, the latest value and the actions stay on screen, so the
+   sections beside them don't each have to restate what they belong to. */
+.metric {
+  display: grid;
+  grid-template-columns: 264px 1fr;
+  gap: 2.6rem;
+  padding-top: 0.5rem;
+}
+
+/* Sticks BELOW the app header, which is itself sticky at top:0 and opaque — at
+   top:0.5rem the rail slid underneath it and lost its name, unit and picker as soon as
+   the page scrolled. It also caps its own height and scrolls internally, so a rail
+   taller than the window can still be read to the bottom (a sticky element taller than
+   the viewport never scrolls into view on its own). The popup menu inside it is
+   portalled to <body>, so this overflow can't clip it — see ActionMenu. */
+.metric__rail {
+  position: sticky;
+  top: calc(var(--app-header-h) + 0.75rem);
+  align-self: start;
+  /* A FIXED height, not a max: the rail is its own scroll pane, pinned to the viewport
+     and scrolling independently of the record beside it. With a max-height it was only
+     a pane once its content happened to overflow; at that size it moved with the page
+     like anything else. `overscroll-behavior: contain` stops a wheel that reaches the
+     rail's end from carrying on into the page scroll. */
+  height: calc(100vh - var(--app-header-h) - 1.75rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 1.4rem;
+  /* Room for the scrollbar so it doesn't sit on top of the text when one appears. */
+  scrollbar-gutter: stable;
+}
+
+/* The picker sits on its own line under the name: beside it, a long metric name would
+   be squeezed into a ~100px column. */
+.metric__pick-row {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 0.6rem;
+}
+
+/* The divider between the columns hangs off the RECORD, not the rail: the rail is
+   sticky and only as tall as its own content, so a border there stopped partway down
+   the page and read as an unfinished line. */
+.metric__record {
+  padding-left: 1.2rem;
+  border-left: 1px solid var(--c-line);
+}
+
+/* The metric's own name is the page's heading — there is no "Metrics" title above it. */
+.metric__name {
+  margin: 0 0 0.6rem;
+  font-family: var(--font-serif);
+  font-size: 1.45rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* One shape for every per-metric notice — a warning, a "computed from" caption, a
+   "read with" note. They differ in COLOUR and WORDING, never in layout: a left rule,
+   a label on its own line, and text flush under it. The old advisory put a ⚠ in a flex
+   row that indented its text while the captions beside it sat flush, so two notes about
+   the same metric disagreed about where their left edge was. */
+.notice {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.7rem;
+  background: var(--c-accent-soft);
+  border-left: 2px solid var(--c-accent-line);
+  border-radius: 0 3px 3px 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--c-muted);
+}
+
+.notice__label {
+  display: block;
+  margin-bottom: 0.15rem;
+  font-family: var(--font-display);
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+
+/* Warning level — an amber rule and label. The text stays the same size and in the
+   same place as any other notice; only the marking changes. */
+.notice--warn {
+  background: var(--sem-watch-bg);
+  border-left-color: var(--sem-watch); /* the chart's noteworthy caret — one caution colour */
+  color: var(--sem-watch-ink-2);
+}
+
+.notice--warn .notice__label {
+  color: var(--sem-watch-ink);
+}
+
+.stat {
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--c-line);
+}
+
+.metric__rail .stat:first-of-type {
+  margin-top: 0.9rem;
+}
+
+.stat__k {
+  display: block;
+  margin-bottom: 0.15rem;
+  font-family: var(--font-display);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+
+.stat__v {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+}
+
+.stat__hero {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+/* The latest reading is the one number the page exists to show, so it is the only
+   figure set in the display face; every other value stays mono and tabular. */
+.stat__big {
+  font-family: var(--font-display);
+  font-size: 2.5rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat__unit {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  color: var(--c-muted);
+}
+
+/* The personal-baseline control is a notice too, in the rail: same left rule and flush
+   text as .notice, in the baseline violet that marks the feature everywhere else. The
+   card chrome (tinted fill, full border, radius) comes off so it doesn't outweigh the
+   metric's own facts above it. */
+/* Takes the SAME caution amber as the chart's noteworthy caret and the warning notice,
+   so the rail speaks in one accent rather than three. (Worth knowing: amber elsewhere
+   in the app means "worth a look" — this box is a status, not a caution, so if it ever
+   reads as a warning, this is the rule to change.) */
+.metric__rail .baseline {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.7rem;
+  background: var(--sem-watch-bg);
+  border: none;
+  border-left: 2px solid var(--sem-watch);
+  border-radius: 0 3px 3px 0;
+}
+
+.metric__rail .baseline .baseline__icon {
+  color: var(--sem-watch-strong);
+}
+
+.metric__rail .baseline__msg {
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.metric__rail .baseline__primary-btn,
+.metric__rail .baseline__secondary {
+  font-size: 0.78rem;
+  text-align: left;
+}
+
+.metric__rail .baseline__actions {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.metric__acts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1.4rem;
+}
+
+.metric__acts .btn-primary,
+.metric__acts .menu,
+.metric__acts .menu__button {
+  width: 100%;
+  justify-content: center;
+}
+
+/* min-width:0 lets the chart shrink inside its grid track instead of overflowing. */
+.metric__record {
+  min-width: 0;
+}
+
+/* A ruled section head: a small display-face label with a hairline running out to the
+   right margin. Shared with the flag/history panels' own headings so every section in
+   the record column reads the same way. */
+.rsec {
+  margin-bottom: 2.3rem;
+}
+
+.rsec__head,
+.metric__record .current-flags h3,
+.metric__record .history h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.7rem;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-ink);
+}
+
+.rsec__head::after,
+.metric__record .current-flags h3::after,
+.metric__record .history h3::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--c-line);
+}
+
+.metric__record .current-flags,
+.metric__record .history {
+  margin-bottom: 2.3rem;
+}
+
+/* A white panel holding several lists that scroll TOGETHER, capped so a long one can't
+   push the rest of the page out of reach. Home's side column uses it for the digest +
+   the flag list. (The Metrics page tried it for current flags + notable readings and
+   it was reverted — there the two read better as plain stacked sections.) */
+.findings {
+  max-height: 30rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  margin-bottom: 2.3rem;
+  /* No top padding: the sticky headings sit flush at the scroll edge, so rows can't
+     peek through a gap above them. Their own padding does the spacing. */
+  padding: 0 1rem 0.9rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+}
+
+/* Sections inside the panel are separated by their own spacing, not by the .rsec
+   bottom margin, which would leave a gap under the last one inside the box. */
+.findings > .rsec {
+  margin-bottom: 0;
+}
+
+.findings > .rsec + .rsec {
+  margin-top: 1.6rem;
+}
+
+/* Each list keeps its own heading, pinned to the top of the shared scroll area so you
+   can always see which of the two you're reading. The white background is what stops
+   rows showing through as they pass underneath. */
+.findings .rsec__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.7rem 0 0.5rem;
+  margin: 0;
+  background: var(--c-surface);
+}
+
+/* Inside the shared panel the flag list gives up its OWN cap — two nested scroll areas
+   in one box is a trap: the outer one looks finished while the inner still has rows. */
+.findings .ovlist {
+  max-height: none;
+  overflow: visible;
+  scrollbar-gutter: auto;
+}
+
+/* Inside the record column the card chrome comes off: the section rules already
+   separate things, so a border around each one is a second, redundant boundary. */
+.metric__record .readings {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+}
+
+/* The chart keeps a panel: it's a drawing with its own coordinate space, and a hairline
+   box tells you where that space ends. The readings table below stays unboxed — its
+   rules already do that job. */
+.metric__record .chart {
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  padding: 0.9rem 1rem 0.4rem;
+  margin: 0;
+}
+
+.metric__record .flag {
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--c-line);
+  border-radius: 0;
+  padding: 0.55rem 0;
+}
+
+.metric__record .flags {
+  gap: 0;
+}
+
+.metric__record .readings th {
+  padding-left: 0;
+  font-family: var(--font-display);
+  letter-spacing: 0.12em;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.metric__record .readings td {
+  padding-left: 0;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.metric__record .readings td:first-child,
+.metric__record .readings td:nth-child(2),
+.metric__record .readings td:nth-child(3) {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The legend closes the page, after the readings — reference material, not a caption. */
+.metric__record .chart-legend {
+  margin-top: 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--c-line);
+}
+
+@media (max-width: 760px) {
+  .metric {
+    grid-template-columns: 1fr;
+    gap: 1.4rem;
+  }
+  .metric__rail {
+    position: static;
+    height: auto;
+    overflow: visible;
+    padding-right: 0;
+    border-bottom: 1px solid var(--c-line);
+    padding-bottom: 1rem;
+  }
+  .metric__record {
+    padding-left: 0;
+    border-left: none;
+  }
+}
+
+/* Separates the export panel (grouped with the baseline control) from the chart
+   below it, in every export state. */
+.metrics__export-slot {
+  margin-bottom: 1.25rem;
+}
+
+.metrics__pickrow .picker {
+  margin-bottom: 0;
+}
+
+.metrics__empty {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* The large buttons — one shape, three weights.
+
+   Squared plate: the display face, uppercase and letter-spaced, on 3px corners. This
+   is deliberately the SAME typographic treatment as the ruled section heads (.rsec__head)
+   and the metric tags, so a button reads as part of the record's type system rather than
+   a web control dropped onto a document. The tracking is what carries the emphasis, which
+   is why the primary needs no shadow and the secondary needs no fill.
+
+   Padding/size/border-width are shared by all three so they line up in a row and stack to
+   equal heights in the rail; only the fill and the border colour separate them. The
+   secondary carries a 1px border of the SAME width as the primary's (the primary borders
+   itself in its own fill) — without that the two would differ by 2px in height. */
+.btn-primary,
+.metrics__rename,
+.menu__button,
+.settings__actions button,
+.form__actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.62rem 1.1rem;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 1px solid;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.btn-primary {
+  color: var(--c-surface);
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--c-accent-strong);
+  border-color: var(--c-accent-strong);
+}
+
+/* Nothing to act on yet — a Save with no edits, a multi-export with no metric chosen.
+   The plate empties out (soft tint, hairline, muted label) rather than dimming to a
+   translucent version of the live button: a filled grey plate still reads as pressable. */
+.btn-primary:disabled,
+.settings__actions button:disabled {
+  color: var(--c-muted);
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent-line);
+  cursor: default;
+}
+
+/* Secondary action beside "+ Add" — same plate, outlined instead of filled, so it reads
+   as the quieter of the pair without changing shape or size. */
+.metrics__rename {
+  color: var(--c-accent);
+  background: var(--c-surface);
+  border-color: var(--c-accent-line);
+}
+
+.metrics__rename:hover {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent);
+}
+
+/* ------------------------------------------------------- ActionMenu (dropdown menu) */
+
+/* The wrapper is the positioning context for the popup, and the click-outside boundary. */
+.menu {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Trigger — deliberately the SAME low-emphasis shape as .metrics__rename (it shares that
+   rule's plate, above), so the one primary button beside it (+ Add reading) stays the
+   loudest thing in the row. */
+.menu__button {
+  color: var(--c-accent);
+  background: var(--c-surface);
+  border-color: var(--c-accent-line);
+}
+
+.menu__button:hover {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent);
+}
+
+/* While the menu is open the trigger stays visibly "pressed". */
+.menu__button--open {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent-line);
+  color: var(--c-accent-strong);
+}
+
+/* Icon-only trigger: square-ish, so the glyph sits in the middle rather than in a
+   button shaped for a word. Vertical padding matches the worded plate so an icon
+   trigger and a labelled one are the same height side by side. */
+.menu__button--icon {
+  padding: 0.62rem 0.62rem;
+  color: var(--c-accent);
+}
+
+/* Portalled to <body> and positioned by ActionMenu against the trigger's rect — so a
+   scrollable or clipping ancestor (the sticky metric rail) can't cut it off. */
+.menu__list {
+  position: fixed;
+  overflow-y: auto;
+  z-index: 40;
+  min-width: 19.5rem;
+  padding: 0.35rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+/* A group heading + a hairline above every group but the first. */
+.menu__group + .menu__group {
+  margin-top: 0.3rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--c-line);
+}
+
+.menu__group-label {
+  margin: 0.15rem 0 0.2rem;
+  padding: 0 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+
+.menu__item {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  text-align: left;
+  font-size: 0.92rem;
+  color: var(--c-ink);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.menu__item:hover,
+.menu__item:focus-visible {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-strong);
+}
+
+/* A TOGGLE item whose panel is currently open (aria-checked). */
+.menu__item--active {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-strong);
+  font-weight: 600;
+}
+
+.menu__item-label {
+  display: block;
+}
+
+/* One quiet line saying what the item does — the reason a menu can be friendlier
+   than a row of bare buttons, which had nowhere to put this. */
+.menu__item-hint {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: var(--c-muted);
+}
+
+/* "24h" chip on a readings-table row that belongs to a timed collection. Quiet, informational
+   (not a warning) — hovering shows the collection's volume/duration/completion date. */
+.readings__coll {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.45rem;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--c-accent-strong);
+  background: var(--c-accent-soft);
+  border: 1px solid var(--c-accent-line);
+  border-radius: 999px;
+  cursor: default;
+  vertical-align: middle;
+}
+
+/* "Did you mean …?" de-dup nudge under the metric field: a typed name that would create
+   a NEW metric but looks like an existing one. Advisory (not an error) — the same muted
+   .form__hint register, with the candidates as inline link-style picks. */
+.form__suggest {
+  color: var(--c-ink);
+}
+
+.form__suggest-pick {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--c-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.form__suggest-pick:hover {
+  color: var(--c-accent-strong);
+}
+
+/* Advisory (warning-level) for a derived metric that is a documented EXCEPTION to the
+   "clinically standard" bar (e.g. NLR). Uses the app's established amber "pay attention"
+   register (.export__warn/.export__stale) but a touch heavier — a solid left accent and a
+   leading ⚠ icon — so it reads as a warning, not the muted derived caption below it. This
+   prominence is the mechanism that keeps surfacing a non-standard metric honest. */
+.metrics__advisory {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  margin: 0.25rem 0 0.6rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--sem-watch-bg);
+  border: 1px solid var(--sem-watch-line);
+  border-left: 4px solid var(--sem-watch-strong);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--sem-watch-ink-2);
+}
+
+.metrics__advisory strong {
+  color: var(--sem-watch-ink);
+}
+
+.metrics__advisory-icon {
+  flex: 0 0 auto;
+  font-size: 1rem;
+  line-height: 1.3;
+  color: var(--sem-watch-ink);
+}
+
+/* Backdrop + a scroll container so the top-anchored panel can scroll as a unit
+   when it's taller than the viewport. Above the sticky app header (z-index 20). */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.modal-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 41;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 4rem 1rem 2rem;
+  overflow-y: auto;
+  pointer-events: none; /* let backdrop clicks through the gutter; panel re-enables */
+}
+
+.modal {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 6rem);
+  display: flex;
+  flex-direction: column;
+  background: var(--c-surface);
+  border-radius: 4px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.2);
+}
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--c-line);
+}
+
+/* A dialog is a small page, so its title takes the page title's serif. */
+.modal__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+/* Inside a dialog the form drops its panel — the modal IS the container, and the two
+   nested boxes read as a card inside a card. */
+.modal__body .form {
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+}
+
+.modal__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--c-muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.modal__close:hover {
+  background: var(--c-accent-soft);
+  color: var(--c-ink);
+}
+
+.modal__body {
+  padding: 1.1rem;
+  overflow-y: auto;
+}
+
+/* Inline unsaved-changes guard at the top of the body (not a nested modal). */
+.modal__discard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.6rem 0.85rem;
+  background: var(--sem-watch-bg-2);
+  border: 1px solid var(--sem-watch-line);
+  border-radius: 8px;
+  font-weight: 600;
+  color: var(--sem-watch-ink);
+}
+
+.modal__discard-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.modal__discard-actions button {
+  padding: 0.32rem 0.6rem;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-ink);
+  background: var(--c-surface);
+  border: 1px solid var(--c-accent-line);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.modal__discard-actions button.danger {
+  color: var(--c-surface);
+  background: var(--sem-bad-strong);
+  border-color: var(--sem-bad-strong);
+}
+
+/* Divider between the form and the PDF import (add-mode only). Unlabelled — the import
+   section's own ruled heading sits right beneath it. */
+.modal__divider {
+  height: 1px;
+  margin: 1.6rem 0 1.3rem;
+  background: var(--c-line);
+}
+
+/* The import section's heading is the app's ruled section head; its parenthetical
+   qualifier drops back to the body face, since a tracked uppercase aside is heavier than
+   the heading it qualifies. */
+.pdf-import > h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.6rem;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-ink);
+}
+
+.pdf-import > h3 .muted {
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.pdf-import > h3::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--c-line);
+}
+
+/* Add-mode green save confirmation, right of the submit button. */
+.form__saved {
+  color: var(--sem-ok);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* ----------------------------------------------------------- section pages */
+
+/* (The "Coming soon" placeholder styles lived here. Removed with the last stub —
+   Immunizations — which became a Profile tab holding real records.) */
+
+/* Conditions & Medications page. */
+/* Conditions & medications, now a Profile tab (the page's own <h2> went with the move —
+   the tab names it). Its two section heads take the app's ruled treatment, the same as
+   Demographics / Height / Weight on the tab beside it. */
+.records__section {
+  margin: 0 0 2.4rem;
+}
+
+/* Section head + its one action, the same row shape as Profile's Demographics / Height /
+   Weight heads (the heading's rule runs out to the button). Shares their small-plate
+   button rule too — see "THE SMALL PLATE". */
+.records__head {
+  display: flex;
+  align-items: center;
+  gap: var(--ctl-gap);
+  margin-bottom: 0.9rem;
+}
+
+.records__section h3 {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-ink);
+}
+
+.records__section h3::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--c-line);
+}
+
+/* "active" medication badge (reuses the .badge pill). */
+.badge--active {
+  background: var(--sem-ok-bg);
+  color: var(--sem-ok);
+}
+
+/* ------------------------------------------------------------------- timeline */
+/* Sticky offsets shared by the timeline's own stacked sticky bars, so the topbar and
+   the month headers line up against the app header (and each other) from one source. */
+.timeline {
+  --app-header-h: 3.25rem;   /* height of the persistent global app header */
+  --tl-topbar-h: 6rem;       /* FALLBACK only; JS overwrites it with the header's real
+                                measured height (see TimelinePage's ResizeObserver) */
+  --app-pad-x: 1.25rem;      /* MUST match .app's horizontal padding (see below) */
+}
+
+/* The sticky header: two rows (title+actions, then filters+sort), staying put while you
+   scroll so BOTH the controls and the month headers below stack against the app header.
+   Its height is NATURAL (content-driven) and measured at runtime into --tl-topbar-h, so
+   the month header — which sticks at app-header-h + tl-topbar-h — always sits flush
+   against it even when the filters wrap or the page zoom changes. It also BLEEDS
+   horizontally into the .app padding (negative margin + equal padding) so its opaque
+   background covers the full content width — spine and card edges — as entries scroll
+   underneath. */
+.timeline__topbar {
+  position: sticky;
+  top: var(--app-header-h);
+  z-index: 12;
+  box-sizing: border-box;
+  margin: 0 calc(-1 * var(--app-pad-x)) 0.4rem;
+  padding: 0.7rem var(--app-pad-x);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.6rem;
+  /* THE PAGE'S OWN GROUND, so this bar is invisible except for what it masks. It named
+      --c-surface-2 before, which is the same value as --c-page in the light theme and a
+      LIGHTER quiet-fill in the dark one — so the sticky bars came out as a visible band a
+      shade off the page behind them. A sticky mask must be the ground it masks. */
+  background: var(--c-page);
+}
+
+/* First header row: title left, view toggle + add right. */
+.timeline__topbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+/* Page title. Grouped rather than duplicated so a page's name looks the same
+   wherever it appears — the serif is what says "this is a document, not a console". */
+.timeline__title,
+.settings-page > h2,
+.profile > h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.45rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.timeline__topbar-actions {
+  display: flex;
+  /* stretch, not center: the list/calendar toggle sizes to its icons and the button to
+     its label, so centring left them different heights side by side. Stretching ties the
+     toggle to whatever the button's plate is, instead of hardcoding a matching height. */
+  align-items: stretch;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+/* Timeline/Calendar view switch — the SAME segmented control as the chart's
+   Linear/Log switch: a hairline box, the active segment filled with the accent. It was
+   a grey track with a sliding white thumb, which is a second idiom for the same job;
+   one control shape for one kind of choice. */
+.timeline__viewtoggle {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--c-surface);
+}
+
+.timeline__viewbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3rem 0.7rem;
+  color: var(--c-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+
+.timeline__viewbtn + .timeline__viewbtn {
+  border-left: 1px solid var(--c-line);
+}
+
+.timeline__viewbtn:hover:not(.timeline__viewbtn--on) {
+  color: var(--c-ink);
+}
+
+.timeline__viewbtn--on {
+  color: var(--c-surface);
+  background: var(--c-accent);
+}
+
+/* Second header row: filters left, sort right. No outer margin — it's inside the
+   sticky header now, spaced by the header's own gap. */
+.timeline__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.timeline__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* THE SMALL PLATE: the large buttons' squared plate (display face, uppercase, tracked,
+   3px corners) scaled down, for controls that sit BESIDE content rather than heading it —
+   the timeline's kind filters and sort, and the section-head actions on Profile. They must
+   read as the same family as "+ Add reading" without competing with it. `--kind` (set
+   inline per timeline chip) drives the dot and the on-state, so a new timeline source
+   needs no CSS — only its KIND_META entry.
+
+   Height comes from `--ctl-h` rather than from the padding: the collapsing search field
+   sits on these same rows, and an input's line box is taller than a button's at the same
+   font size, so two controls sized by their own content came out visibly different. The
+   padding is now the floor and the token is the height. */
+.timeline__filter,
+.timeline__sort,
+.profile__basics-head > button,
+.profile__measure-head > button,
+.records__head > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: var(--ctl-h);
+  padding: 0.28rem 0.6rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 3px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.timeline__filter {
+  padding-left: 0.5rem;
+  color: var(--c-muted);
+}
+
+.timeline__filter:hover {
+  border-color: var(--c-accent-line);
+}
+
+/* On-state stays keyed to the entry kind rather than the accent: these chips answer
+   "which sources am I seeing", and the colour is the same one the entry dot uses. */
+.timeline__filter--on {
+  color: var(--c-ink);
+  border-color: color-mix(in srgb, var(--kind) 45%, var(--c-line));
+  background: color-mix(in srgb, var(--kind) 8%, var(--c-surface));
+}
+
+/* Visually hidden, NOT removed — keyboard focus and screen readers still get a real
+   checkbox; the pill is only paint. :focus-visible ring is drawn on the label below. */
+.timeline__filter-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.timeline__filter:has(.timeline__filter-input:focus-visible) {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+
+.timeline__filter-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--kind);
+  opacity: 0.28;
+  transition: opacity 0.12s;
+}
+
+.timeline__filter--on .timeline__filter-dot {
+  opacity: 1;
+}
+
+/* Per-kind tag on an entry. Tinted rather than saturated-filled: at one tag per entry
+   down a long list, solid color blocks competed with the readings for attention. */
+.timeline__tag {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--kind) 72%, var(--c-ink));
+  background: color-mix(in srgb, var(--kind) 13%, var(--c-surface));
+}
+
+.timeline__sort,
+.profile__basics-head > button,
+.profile__measure-head > button,
+.records__head > button {
+  gap: 0.3rem;
+  color: var(--c-accent);
+  border-color: var(--c-accent-line);
+}
+
+.timeline__sort:hover,
+.profile__basics-head > button:hover,
+.profile__measure-head > button:hover,
+.records__head > button:hover {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent);
+}
+
+/* Sort-direction chevron: down = newest first (descending), rotated up = oldest first. */
+.timeline__sort-chevron {
+  display: inline-flex;
+  color: var(--c-muted);
+  transition: transform 0.15s;
+}
+
+.timeline__sort-chevron--up {
+  transform: rotate(180deg);
+}
+
+/* The spine: one continuous rule down the month's entries, with a per-entry dot sitting
+   on it. This is what makes the list read as a TIMELINE rather than a stack of cards.
+   The DOT carries kind (colour) and nothing else; the card is a plain card.
+   Geometry comes from two shared vars so the spine and the dots CANNOT drift: the spine
+   is centered on --tl-spine-x, and every dot is centered on the same x via a -50%
+   translate (kept from when dots varied in size, and still the reason a dot can never sit
+   a hair off the line). */
+.timeline__list {
+  --tl-list-pad: 1.5rem;   /* left padding = where a card's left edge sits */
+  --tl-spine-x: 0.5rem;    /* center of the spine, measured from the list's left edge */
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 var(--tl-list-pad);
+  display: grid;
+  gap: 0.55rem;
+}
+
+.timeline__list::before {
+  content: '';
+  position: absolute;
+  left: var(--tl-spine-x);
+  transform: translateX(-50%);
+  top: 0.4rem;
+  bottom: 0.4rem;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--c-line);
+}
+
+.tl-entry {
+  position: relative;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  padding: 0.7rem 0.9rem;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.tl-entry:hover {
+  border-color: var(--c-accent-line);
+}
+
+/* The dot on the spine. Centered on --tl-spine-x (in card-relative coords: spine-x minus
+   the list padding), then translate(-50%,-50%) self-centers it both axes, so it always sits
+   ON the line. One size for every entry — the dot carries KIND, never importance. Ringed in
+   page-bg so the spine appears to pass behind it. */
+.tl-entry::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--tl-spine-x) - var(--tl-list-pad));
+  top: 1.15rem;
+  transform: translate(-50%, -50%);
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--kind);
+  /* The halo punches the spine line behind the dot, so it is the page ground too. */
+  box-shadow: 0 0 0 3px var(--c-page);
+}
+
+.tl-entry__head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.35rem;
+}
+
+.tl-entry__date {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+  color: var(--c-muted);
+}
+
+.tl-entry__subtype {
+  font-size: 0.75rem;
+  color: var(--c-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Condition/medication entries: title is a link to the C/M section. */
+.tl-entry__link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--c-accent);
+  font-size: 0.86rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tl-entry__link:hover {
+  text-decoration: underline;
+}
+
+.tl-entry__title {
+  font-size: 0.86rem;
+}
+
+.tl-entry__notes {
+  margin: 0.3rem 0;
+  font-size: 0.8rem;
+}
+
+.tl-entry__event .readings__actions {
+  margin-top: 0.4rem;
+}
+
+/* Lab panel: a head line with counts, the NOTABLE readings inline, then the rest behind
+   a collapsed disclosure (see LabPanel in TimelinePage.jsx for the why). */
+.tl-labs__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tl-labs__title {
+  font-size: 0.86rem;
+}
+
+.tl-labs__count {
+  font-size: 0.75rem;
+  color: var(--c-muted);
+}
+
+.tl-labs__notable {
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--sem-watch-ink-2);
+  background: var(--sem-watch-bg-2);
+}
+
+/* The notable block is the point of the panel — tinted so it reads as the signal, with
+   the disclosure below it as the "everything else" escape hatch. */
+.tl-readings--notable {
+  margin-top: 0.45rem;
+  padding: 0.3rem;
+  background: var(--sem-watch-bg-2);
+  border: 1px solid var(--sem-watch-line);
+  border-radius: 6px;
+}
+
+.tl-readings--notable .tl-reading:hover {
+  background: var(--sem-watch-bg-2);
+}
+
+.tl-entry__labs {
+  margin-top: 0.4rem;
+}
+
+.tl-entry__labs summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--c-accent);
+}
+
+.tl-entry__labs summary:hover {
+  text-decoration: underline;
+}
+
+.tl-readings {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.tl-reading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  padding: 0.25rem 0.4rem;
+  font: inherit;
+  /* AFTER the shorthand on purpose: `font: inherit` resets size to the body's, which
+     made a lab row's metric name the largest text in the entry. */
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+
+.tl-reading:hover {
+  background: var(--c-accent-soft);
+}
+
+.tl-reading__metric {
+  flex: 1 1 auto;
+  color: var(--c-accent);
+}
+
+.tl-reading__value {
+  flex: 0 0 auto;
+  font-family: var(--font-num);
+  font-size: 0.86rem;
+  color: var(--c-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-reading__notable {
+  flex: 0 0 auto;
+  color: var(--sem-watch-strong);
+  font-size: 0.66rem;
+}
+
+/* Month grouping: a clickable, collapsible heading that parks below the sticky header
+   while you scroll its month. Differentiation is the chevron + uppercase weight only —
+   no pill background (scrapped) and no rule line. It keeps the PAGE background so it
+   stays opaque enough to mask entries scrolling under it while it's stuck, but shows no
+   distinct color band. */
+.timeline__group {
+  margin-bottom: 0.4rem;
+  /* Calendar → month focus scrolls a group to the top; offset it below the sticky
+     app-header + header stack so the month header isn't hidden behind them. */
+  scroll-margin-top: calc(var(--app-header-h) + var(--tl-topbar-h) + 0.5rem);
+}
+
+.timeline__month {
+  position: sticky;
+  /* -2px tucks the month UNDER the header's bottom edge. The header has a higher z-index,
+     so it paints over that overlap — closing the seam where the spine dots were peeking
+     between the two sticky bars. 2px (not 1) to cover fractional-DPI rounding on scaled
+     displays, where a 1px CSS overlap can round to less than a device pixel. */
+  top: calc(var(--app-header-h) + var(--tl-topbar-h) - 2px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* Full-bleed to match the section header's width: its opaque background then covers the
+     SAME full content width (spine, dots, card edges) the header does, so nothing peeks
+     at the sides as entries scroll under it. Negative margin + equal padding (like the
+     topbar); the label lands back at the content edge. No width:100% — a block-level flex
+     button already fills, and width:100% would fight the negative margins. */
+  margin: 0 calc(-1 * var(--app-pad-x)) 0.55rem;
+  /* A flex <button> shrinks to its content even when block-level, so an explicit bleed
+     width is needed to fill: content width + the two padding bleeds. */
+  width: calc(100% + 2 * var(--app-pad-x));
+  padding: 0.4rem var(--app-pad-x);
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--c-ink);
+  background: var(--c-page); /* the page's own ground — see .timeline__topbar */
+  border: none;
+  cursor: pointer;
+}
+
+.timeline__month:hover {
+  color: var(--c-ink);
+}
+
+/* Chevron sits at the RIGHT edge (label leads), points down when open and rotates to
+   point right when the month is collapsed. inline-flex so the SVG centers cleanly. */
+.timeline__month-chevron {
+  display: inline-flex;
+  color: var(--c-muted);
+  transition: transform 0.15s;
+}
+
+.timeline__month--collapsed .timeline__month-chevron {
+  transform: rotate(-90deg);
+}
+
+/* The label carries the section rule, so a month header reads like every other section
+   heading in the app (see .rsec__head). */
+.timeline__month-label {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.timeline__month-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--c-line);
+}
+
+/* The entry count: quiet, not uppercased, so it reads as a subordinate detail. */
+.timeline__month-count {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--c-muted);
+}
+
+/* EVERY entry reads with the same weight. An earlier build ranked entries into three
+   presentational tiers — dot size/ring plus type weight and colour — which made the timeline
+   argue about what mattered. Deciding that is the reader's job, and the filters are the tool
+   for it, so there is now exactly one dot size and one type weight (the dot size lives in
+   .tl-entry::before above — one rule, not an override). The DOT still carries KIND (colour);
+   it no longer carries importance. */
+.tl-entry__date,
+.tl-entry__link,
+.tl-entry__title,
+.tl-labs__title {
+  font-weight: 500;
+}
+
+/* The radiology report, rendered INSIDE its imaging entry — the written half of the same
+   exam. Indented under the study's own line so it reads as part of it, not as a sibling. */
+.tl-entry__sublink {
+  display: inline-block;
+  margin-top: 0.15rem;
+  padding: 0;
+  font-size: 0.78rem;
+  color: var(--c-link);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tl-entry__sublink:hover { color: var(--c-accent-strong); }
+
+/* ---- Calendar overview (the "zoom out" view) --------------------------------------
+   A year of 12 month cells; each cell carries a colored dot per KIND present that month,
+   so a glance across the grid shows WHEN things clustered. Clicking a non-empty cell
+   jumps to that month in the timeline view (focusMonth in TimelinePage). */
+.tl-cal__year {
+  margin-bottom: 1.25rem;
+}
+
+/* Matches the flat month-header style: no pill, page background only (opaque for sticky
+   masking), full-bleed to the section-header width, 2px tuck under the sticky header. */
+.tl-cal__year-label {
+  position: sticky;
+  top: calc(var(--app-header-h) + var(--tl-topbar-h) - 2px);
+  z-index: 5;
+  margin: 0 calc(-1 * var(--app-pad-x)) 0.55rem;
+  width: calc(100% + 2 * var(--app-pad-x));
+  padding: 0.4rem var(--app-pad-x);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--font-num);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--c-ink);
+  background: var(--c-page);   /* the page's own ground — see .timeline__topbar */
+}
+
+/* Same hairline rule the list view's month headers carry. */
+.tl-cal__year-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--c-line);
+}
+
+.tl-cal__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+}
+
+@media (max-width: 560px) {
+  .tl-cal__grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.tl-cal__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-height: 4.2rem;
+  padding: 0.6rem 0.7rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+
+.tl-cal__cell:hover:not(:disabled) {
+  border-color: var(--c-accent-line);
+}
+
+.tl-cal__cell--empty {
+  background: var(--c-surface-2);
+  border-style: dashed;
+  cursor: default;
+  color: var(--c-muted);
+}
+
+.tl-cal__month {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+
+.tl-cal__cell--empty .tl-cal__month {
+  color: var(--c-accent-line);
+}
+
+.tl-cal__dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+
+.tl-cal__dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+}
+
+/* Resolved-on note shown alongside the onset date in the conditions list. */
+.records__resolved {
+  font-style: italic;
+}
+
+/* The shared collapsing search control (components/shell/SearchField.jsx) — the app's
+   ONLY search control, used by Immunizations and Documents alike.
+
+   It ANIMATES OPEN, which is why every part is mounted at all times and the states are a
+   class rather than two different subtrees (see SearchField.jsx): a magnifier button
+   REPLACED BY a field has nothing to transition between. The collapsed field is width 0
+   and opacity 0, so the control's footprint really is just the button — a hidden-but-
+   laid-out field would push its neighbours around while showing nothing.
+
+   The container's `gap` is 0 on purpose: a flex gap applies between zero-width items too,
+   so a gapped row would reserve dead space beside the collapsed button. The spacing rides
+   on each item's own margin, which collapses with it — and that margin is `--ctl-gap`,
+   the SAME token the surrounding toolbar uses between its own controls. That is the point:
+   the space between the section head's rule and the button, between the button and the
+   field, and between the field and "+ Add immunization" are one measurement, not three
+   that happen to look similar. */
+.searchfield {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  min-height: var(--ctl-h);
+  color: var(--c-muted);
+}
+
+/* `width` is the animated property rather than `max-width`, because the field's open
+   width is a fixed 16rem — a max-width tween on an auto-width box eases toward a target
+   the box never reaches, which reads as the animation stopping early. The count beside
+   it DOES use max-width, since its width depends on the words in it. */
+.searchfield__input {
+  width: 0;
+  /* A flex item's `min-width` is `auto`, i.e. its intrinsic minimum — so `width: 0` alone
+     left the collapsed field ~23px wide, and the button sat in a control twice its size.
+     A collapsing flex item needs this or it never actually reaches zero. */
+  min-width: 0;
+  padding: 0;
+  margin-left: 0;
+  opacity: 0;
+  pointer-events: none;
+  height: var(--ctl-h);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--c-ink);
+  background: var(--c-surface);
+  /* `box-sizing: border-box` is global, so a bordered box can never be narrower than its
+     own borders — the collapsed field stuck at 2px. The border arrives with the width. */
+  border: 0 solid var(--c-accent-line);
+  border-radius: 3px;
+  transition: width 0.18s ease, margin 0.18s ease, padding 0.18s ease,
+              opacity 0.12s ease;
+}
+
+.searchfield--open .searchfield__input {
+  width: 16rem;
+  padding: 0 0.5rem;
+  margin-left: var(--ctl-gap);
+  opacity: 1;
+  pointer-events: auto;
+  border-width: 1px;
+}
+
+.searchfield__input:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 1px;
+}
+
+/* ONE button for both states: the magnifier TURNS INTO a cross when the field opens,
+   rather than a second × appearing beside it. It was already the toggle in both
+   directions, so the × was a duplicate control — and the cross is simply what the button
+   means once the field is open. Sized to --ctl-h so it lines up with the plate buttons
+   it sits beside. */
+.searchfield__toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--ctl-h);
+  height: var(--ctl-h);
+  padding: 0;
+  color: var(--c-muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+
+.searchfield__toggle:hover,
+.searchfield--open .searchfield__toggle {
+  color: var(--c-accent);
+  border-color: var(--c-accent-line);
+  background: var(--c-accent-soft);
+}
+
+/* Both glyphs are always rendered, stacked in the same box — one icon SWAPPED for
+   another cannot be animated, the same reason the expansion itself couldn't be. They
+   cross-fade through a quarter turn, which is what makes it read as the magnifier
+   BECOMING the cross rather than two icons blinking. */
+.searchfield__glyph {
+  position: absolute;
+  display: inline-flex;
+  transition: opacity 0.16s ease, transform 0.22s ease;
+}
+
+.searchfield__glyph--search {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+.searchfield__glyph--close {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.7);
+}
+
+.searchfield--open .searchfield__glyph--search {
+  opacity: 0;
+  transform: rotate(90deg) scale(0.7);
+}
+
+.searchfield--open .searchfield__glyph--close {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+.searchfield__count {
+  max-width: 0;
+  margin-left: 0;
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: max-width 0.18s ease, margin 0.18s ease, opacity 0.12s ease;
+}
+
+.searchfield--open .searchfield__count {
+  max-width: 12rem;
+  margin-left: var(--ctl-gap);
+  opacity: 1;
+}
+
+/* A caller passes `count` only when it has something to say — Immunizations until you
+   type, Documents until the query is long enough — and an empty count still claimed its
+   `--ctl-gap` margin, so the gap between the field and "+ Add immunization" was DOUBLE
+   every other gap on the row (24px against 12) with nothing in between to explain it.
+   `:empty` is the right test rather than not rendering the span: the node stays mounted,
+   so the count still fades in when it arrives instead of appearing without the
+   transition. */
+.searchfield--open .searchfield__count:empty {
+  max-width: 0;
+  margin-left: 0;
+}
+
+/* A motion preference is a real accessibility setting, not a nicety: the expansion and
+   the glyph swap are decoration, and the control works identically without them. */
+@media (prefers-reduced-motion: reduce) {
+  .searchfield__input,
+  .searchfield__glyph,
+  .searchfield__count {
+    transition: none;
+  }
+}
+
+/* Immunizations table. Column widths are declared rather than left to the browser: with
+   eight columns the auto layout gave a two-word "Site" the same width as a Notes cell
+   holding a sentence, so the vaccine name — the thing you scan by — was the one that
+   wrapped. `table-layout: fixed` makes the percentages authoritative. */
+.records__imm-table {
+  table-layout: fixed;
+}
+
+.records__imm-table th:nth-child(1) { width: 8.5rem; }   /* Date (mono, fixed width) */
+.records__imm-table th:nth-child(2) { width: 22%; }      /* Vaccine — the widest, it's the name */
+.records__imm-table th:nth-child(3) { width: 13%; }      /* Dose — fits '2025-26 season' unwrapped */
+.records__imm-table th:nth-child(4) { width: 6.5rem; }   /* Amount */
+.records__imm-table th:nth-child(5) { width: 11%; }      /* Site */
+.records__imm-table th:nth-child(6) { width: 8%; }       /* Lot */
+.records__imm-table th:nth-child(7) { width: auto; }     /* Notes takes what's left */
+.records__imm-table th:nth-child(8) { width: 8.5rem; }   /* actions */
+
+.records__imm-table td {
+  overflow-wrap: anywhere;   /* a long lot or vaccine name wraps rather than forcing scroll */
+}
+
+/* An amount and a lot are both FIGURE-like — a volume with its unit, a batch code — so
+   they take the mono face; a column of them lines up and a lot number stays legible. */
+.records__imm-amount,
+.records__imm-lot {
+  font-family: var(--font-num);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* An immunization's date column — mono like every other date the app tabulates. The
+   "Date unknown" placeholder inside it stays prose: it is a statement, not a date. */
+.records__imm-date {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.86rem;
+}
+
+.records__imm-date .muted {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+}
+
+/* (The old `.form select` block lived here and was DEAD WEIGHT that still won: it sat
+   later in the file than the unified `.form input, .form select, .form textarea` rule, so
+   selects kept the pre-restyle 6px radius and grey border while every text input moved to
+   3px on the token colour. Removed — selects take the shared rule.) */
+
+/* Primary identifier field (condition/medication name): prominent, full width. */
+/* The form's headline field (an event's Title), rendered ABOVE .form__grid rather than
+   inside it. Same label treatment and same full width as the stacked fields below; only
+   the input's size marks it as primary. */
+.form__primary {
+  margin-bottom: 1rem;
+}
+
+.form__primary input {
+  padding: 0.5rem 0.6rem;
+  font-size: 1.05rem;
+  font-weight: 500;
+}
+
+/* ICD-10 on its own full-width row so the code input + lookup aren't squeezed
+   into a narrow grid cell (which truncated the toggle/search field). */
+.form__icd10 {
+  margin-bottom: 0.85rem;
+}
+
+/* Secondary field (ICD-10 code): visually quieter and narrower than the name,
+   but the row around it is full width so the lookup below can expand. */
+.form__secondary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--c-ink);
+}
+
+.form__icd10-input {
+  width: 12rem;
+  max-width: 100%;
+  font-size: 0.9rem;
+}
+
+/* A non-label grid field (used for the resolved-on date + its unknown toggle),
+   styled to match the form's <label> cells. */
+.form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.form__field-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--c-ink);
+}
+
+/* Inline "Date unknown" checkbox — horizontal, normal weight, quiet. */
+.form__check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--c-ink);
+}
+
+.form__check input {
+  width: auto;
+  margin: 0;
+}
+
+/* ICD-10 lookup helper. */
+.icd10__toggle,
+.icd10__close {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-top: 0.25rem;
+  color: var(--c-accent);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.icd10__toggle:hover,
+.icd10__close:hover {
+  text-decoration: underline;
+}
+
+.icd10 {
+  margin-top: 0.3rem;
+}
+
+.icd10__bar {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.icd10__search {
+  flex: 1 1 auto;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 400;
+  border: 1px solid var(--c-accent-line);
+  border-radius: 6px;
+}
+
+.icd10__results {
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  max-height: 14rem;
+  overflow-y: auto;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+}
+
+.icd10__result {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--c-line);
+  text-align: left;
+  font: inherit;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.icd10__result:hover {
+  background: var(--c-accent-soft);
+}
+
+.icd10__name {
+  flex: 1 1 auto;
+}
+
+.icd10__code {
+  flex: 0 0 auto;
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: var(--c-accent);
+}
+
+.icd10__empty {
+  padding: 0.5rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+/* ----------------------------------------------------------------- profile */
+
+.profile > h2 {
+  margin-bottom: 0.9rem;
+}
+
+.profile__basics {
+  margin: 1rem 0 1.5rem;
+}
+
+/* Section head + its one action on the same line: the heading takes the ruled
+   .rsec__head treatment and `flex: 1` so its hairline runs out to the button, which
+   then sits at the right margin like "+ Add reading" does in the metric rail. */
+.profile__basics-head,
+.profile__measure-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.profile__basics-head h3,
+.profile__measure-head h3 {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-ink);
+}
+
+.profile__basics-head h3::after,
+.profile__measure-head h3::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--c-line);
+}
+
+/* Read view: the saved demographics as the shared labelled-fact rows — same hairline
+   rhythm and same label type as the metric rail's stats, laid out side by side because
+   there are only two of them and each value is short. */
+.profile__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0 2rem;
+  max-width: 46rem;
+  margin: 0;
+}
+
+.profile__fact {
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--c-line);
+}
+
+.profile__fact dt {
+  margin-bottom: 0.15rem;
+  font-family: var(--font-display);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+
+.profile__fact dd {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+/* Mono is for FIGURES: a date of birth takes it, "Male" does not. */
+.profile__fact--num dd {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The qualifier after a value ("· for medical reference context", "· 26 years") returns
+   to the body face — it's prose about the fact, not part of the figure. */
+.profile__fact dd .muted {
+  font-family: var(--font-body);
+}
+
+.profile__sex {
+  border: 1px solid var(--c-line);
+  border-radius: 3px;
+  padding: 0.7rem 0.9rem 0.85rem;
+  margin: 0 0 1.2rem;
+}
+
+/* A legend is this fieldset's label, so it takes the form's own label type. */
+.profile__sex legend {
+  padding: 0 0.35rem;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+
+.profile__sex legend .muted {
+  font-family: var(--font-body);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* Segmented control: one hairline box, the selected option filled with the accent —
+   the SAME control as the chart's Linear/Log switch and the timeline's list/calendar
+   toggle. It used to be a grey track with a raised white thumb, which was a third idiom
+   for one kind of choice. Real radio inputs underneath (visually hidden) keep keyboard +
+   form semantics. */
+.segmented {
+  display: inline-flex;
+  /* A grid child stretches by default, which left the three options huddled at the left
+     of a full-width box in Settings' Appearance row. */
+  justify-self: start;
+  width: fit-content;
+  overflow: hidden;
+  background: var(--c-surface);
+  border: 1px solid var(--c-accent-line);
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.segmented__option {
+  margin: 0;
+}
+
+.segmented__option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segmented__option + .segmented__option span {
+  border-left: 1px solid var(--c-line);
+}
+
+.segmented__option span {
+  display: block;
+  padding: 0.45rem 1.1rem;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.segmented__option:hover:not(:has(input:checked)) span {
+  color: var(--c-ink);
+}
+
+.segmented__option:has(input:checked) span {
+  color: var(--c-surface);
+  background: var(--c-accent);
+}
+
+.segmented__option input:focus-visible + span {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 1px;
+}
+
+.profile__clear {
+  background: none;
+  border: none;
+  color: var(--c-accent);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0;
+  margin-left: 0.85rem;
+  vertical-align: middle;
+}
+
+.profile__clear:hover {
+  text-decoration: underline;
+}
+
+/* Layout/type come from `.form label`; this only sets the measure — the field is a date,
+   which never needs the full dialog width. */
+.profile__dob {
+  max-width: 16rem;
+  margin-bottom: 1.2rem;
+}
+
+/* A hint, not a label: back to the body face (the label's uppercase tracking would
+   otherwise make "Currently: 26 years" read as a heading). */
+.profile__age {
+  flex: 0 0 100%;
+  margin-top: 0.1rem;
+  font-family: var(--font-body);
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* Weight / Height sections. No top border of their own — each one's ruled heading is
+   already a full-width rule, so a second line above it drew two rules per section. */
+.profile__measure {
+  margin-top: 2rem;
+}
+
+
+
+.profile__current {
+  margin: 0 0 1.1rem;
+}
+
+/* The "updated <date>" qualifier trails the figure on its baseline rather than sitting
+   under it — same shape as the metric rail's latest reading. */
+.profile__current .stat__hero .muted {
+  margin-left: 0.3rem;
+}
+
+/* ------------------------------------------------------------ timed collections tab */
+
+.collections__table {
+  margin-top: 1.2rem;
+}
+
+/* The gated Delete: `not-allowed` rather than the row actions' plain `default`, because
+   this button has a REASON in its tooltip and the cursor is what invites hovering for it. */
+.collections__table .readings__actions button:disabled {
+  cursor: not-allowed;
+}
+
+/* Expand/collapse toggle in the first cell. The chevron points right when closed and
+   down when open — the same rotation the timeline's month headers use. */
+.collections__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.15rem;
+  color: var(--c-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transform: rotate(-90deg);
+  transition: transform 0.15s, color 0.12s;
+}
+
+.collections__toggle--open {
+  transform: rotate(0deg);
+  color: var(--c-ink);
+}
+
+.collections__toggle:hover {
+  color: var(--c-ink);
+}
+
+/* The open row and its panel read as ONE block: the row tints, and the panel below it
+   loses the border between them. */
+.collections__table tr.is-open > td {
+  background: var(--c-accent-soft);
+  border-bottom-color: transparent;
+}
+
+.collections__panel-row > td {
+  padding: 0 0.85rem 0.85rem;
+  background: var(--c-accent-soft);
+}
+
+.collections__analytes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+  gap: 0 2rem;
+}
+
+/* One analyte per line: name, its value, and the expected-normal it was judged against —
+   the same three facts, in the same order, as a row of the readings table. */
+.collections__analytes li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.3rem 0;
+  border-top: 1px solid var(--c-accent-line);
+  font-size: 0.86rem;
+}
+
+.collections__analyte {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.collections__analyte-value {
+  flex: 0 0 auto;
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  color: var(--c-ink);
+}
+
+.collections__analyte-normal {
+  flex: 0 0 7rem;
+  text-align: right;
+  font-family: var(--font-num);
+  font-size: 0.8rem;
+}
+
+/* Fields fill their form and the form sets its own measure (see .form__grid) — so the
+   weight/height entry form, which holds a number, a unit and a date, sets a narrow one
+   rather than running the width of whatever contains it. */
+.profile__form {
+  max-width: 24rem;
+}
+
+/* Except in a dialog, which has already set the measure: the cap there left a column of
+   dead space down the right of the panel. */
+.modal__body .profile__form {
+  max-width: none;
+}
+
+/* Chart and history side by side: two views of ONE series. Stacked, the numbers sat below
+   the fold on a section that is mostly a short list. The chart takes the wider track (it
+   uses the width); the list reads fine in a narrow one. */
+.profile__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+/* No chart (Height today) — the list takes the full width rather than leaving a column
+   of empty space that reads as a chart that failed to load. */
+.profile__body--nochart {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.profile__body--nochart .profile__history {
+  max-width: 32rem;
+}
+
+/* The pane is capped to the CHART's height and scrolls inside itself, so the section is
+   as tall as the chart rather than as tall as your weigh-in history. `--profile-pane` is
+   the chart's own height (see .profile__chart .chart); keeping the two in one variable is
+   what stops them drifting apart. `scrollbar-gutter` reserves the bar's width so the rows
+   don't shift when the list grows past the cap. */
+:root {
+  --profile-pane: 19rem;
+}
+
+.profile__history {
+  max-height: var(--profile-pane);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.profile__chart .chart {
+  height: var(--profile-pane);
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Recharts' ResponsiveContainer measures its parent, so the wrapper has to be the thing
+   with the height — not the SVG. */
+.profile__chart .chart > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/* The table's own top margin would push it below the chart's top edge. */
+.profile__history .readings {
+  margin-top: 0;
+}
+
+/* The header stays put while the rows scroll under it — the same rule the findings panel
+   follows: a scrolled list whose column labels have gone is a list of unlabelled numbers. */
+.profile__history thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--c-surface);
+}
+
+/* The row currently open in the edit form, so it's clear WHICH measurement the form
+   above is about — the form is not adjacent to its row once the list has scrolled. */
+.profile__history tr.is-editing {
+  background: var(--c-accent-soft);
+}
+
+/* Dates and values are figures: mono and tabular, like the readings table on a metric's
+   page and the timeline's entry dates. */
+.profile__history td {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.86rem;
+}
+
+.profile__history .readings__actions {
+  font-family: var(--font-body);
+}
+
+/* ------------------------------------------------ chart legend (inside .chart) */
+
+/* One cohesive legend under the chart: brief structural one-liners on top, a thin
+   sub-divider, then the richer threshold blocks. Quiet/informational throughout. */
+.chart-legend {
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--c-line);   /* subtle divider from the chart above */
+}
+
+.chart-legend__line {
+  margin: 0 0 0.35rem;
+}
+
+.chart-legend__line:last-child {
+  margin-bottom: 0;
+}
+
+/* Separates the structural one-liners from the threshold blocks. */
+.chart-legend__divider {
+  border: none;
+  border-top: 1px dashed var(--c-line);
+  margin: 0.6rem 0;
+}
+
+.chart-legend__thresholds {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+/* Each threshold reads like a structural one-liner (muted small, bold lead-in)
+   plus a quiet citation line beneath — same voice as "Shaded band = …". */
+.chart-legend__threshold p {
+  margin: 0;
+}
+
+.chart-legend__threshold strong {
+  font-weight: 600;
+  color: var(--c-ink);
+}
+
+.chart-legend__link {
+  color: var(--c-accent);
+  text-decoration: none;
+}
+
+.chart-legend__link:hover {
+  text-decoration: underline;
+}
+
+/* Qualitative timeline strip (#4) — a compact time axis for Positive/Negative/
+   Yellow/... results with no Y value. Renders below the numeric chart (mixed
+   case) or standalone (no numeric chart exists — the common case, 23 of 24
+   qualitative-carrying metrics). Height matches QualitativeTimeline.jsx's
+   VIEW_H exactly, so the HTML badge overlay's absolute positions land on the
+   same coordinate space as the SVG beneath it. */
+.qual-timeline {
+  position: relative;
+  height: 76px; /* matches QualitativeTimeline.jsx's VIEW_H exactly */
+  margin-top: 0.75rem;
+}
+
+.qual-timeline__badges {
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* let hover/clicks pass through except on badges themselves */
+}
+
+.qual-timeline__badge {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+  pointer-events: auto; /* re-enable so the title tooltip is hoverable */
+  white-space: nowrap;
+}
+
+/* Neutral categorical label — same neutral-gray FAMILY as the app's existing
+   .badge (App.css), but a darker step (gray-3 fill / gray-8 text, vs .badge's
+   gray-1/gray-7) for clearer contrast against the page's white background —
+   .badge's own gray-1 read as too subtle here. Deliberately UNIFORM across
+   every value (Negative, Positive, Clear, Moderate, ...): there's no
+   deterministic signal to color-code "good/bad" on a qualitative result
+   without per-metric clinical judgment (the surface-not-diagnose boundary —
+   see CLAUDE.md). Distinguished by TEXT only, never color. Slightly larger and
+   normal-case (not .badge's uppercase 0.7rem) since values run longer than a
+   flag-kind word ("Non-Reactive" vs "WATCH"). */
+.qual-badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 3px;
+  background: var(--c-accent-soft);
+  border: 1px solid var(--c-accent-line);
+  color: var(--c-ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+/* ---- Imaging: local DICOM viewer (ImagingPage.jsx) --------------------------------- */
+/* Title + an info affordance on ONE line. Every row of page chrome is a row the images
+   don't get, and on a fixed-viewport pane that trade is direct. */
+.dcm__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* The page-title serif, sized like Documents': this page hands its whole viewport to a
+   locked stage below, so the title anchors rather than banners. */
+.dcm__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.45rem;
+  font-weight: 600;
+}
+
+/* Info affordance: the privacy note on hover/focus. The bubble is always in the DOM
+   (just visually hidden) so assistive tech can reach the text — a title attribute
+   would not be selectable or reliably announced. */
+.dcm__info {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+  border-radius: 50%;
+}
+
+.dcm__info:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+
+.dcm__info-bubble {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 0.4rem);
+  z-index: 20;
+  width: max-content;
+  max-width: min(26rem, 70vw);
+  padding: 0.55rem 0.7rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--c-ink);
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(33, 37, 41, 0.14);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s;
+}
+
+.dcm__info:hover .dcm__info-bubble,
+.dcm__info:focus .dcm__info-bubble,
+.dcm__info:focus-within .dcm__info-bubble {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Documents reuses the imaging page's info affordance verbatim — same control, same
+   meaning (a local-only privacy note), so it shares the rules above rather than
+   duplicating them and letting the two drift apart. */
+.docs__info { position: relative; display: inline-flex; align-items: center; cursor: help; }
+.docs__info:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+
+.docs__info-bubble {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 0.4rem);
+  z-index: 20;
+  width: max-content;
+  max-width: min(26rem, 70vw);
+  padding: 0.55rem 0.7rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--c-ink);
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(33, 37, 41, 0.14);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s;
+}
+
+.docs__info:hover .docs__info-bubble,
+.docs__info:focus .docs__info-bubble,
+.docs__info:focus-within .docs__info-bubble {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* The imaging page is an APP-LIKE, NON-SCROLLING layout: the viewer must not be able to
+   move AT ALL, and sticky can't deliver that (a sticky element still slides until it
+   pins). So the DOCUMENT is given nothing to scroll: the section fills the remaining
+   viewport exactly (overflow hidden), and the series sidebar is the only scrolling pane.
+   The .app document padding is trimmed on this page via :has so the math works out. */
+/* Imaging keeps the shared TOP padding (so it lines up with every other section) but
+   drops the 4rem bottom runway — that runway exists for scrolling pages, and this pane
+   deliberately doesn't scroll, so it would just be dead space below the viewer. */
+.app:has(> .dcm) {
+  padding-bottom: var(--page-pad-y);
+}
+
+.dcm {
+  display: flex;
+  flex-direction: column;
+  /* Fill what's left: viewport minus the app header and this page's own top+bottom
+     padding, minus a little slack. The slight UNDERSHOOT is deliberate — it guarantees
+     no document scrollbar ever appears. Derived from --page-pad-y so changing the page
+     padding can't silently desync this height. */
+  height: calc(100vh - var(--app-header-h) - (2 * var(--page-pad-y)) - 0.5rem);
+  overflow: hidden;
+}
+
+/* The instrument gets the FULL width; the picker is a drawer laid over it (position
+   context here). A permanent rail cost ~37% of the page to an index you consult a few
+   times a session, on a record where one study can carry 94 series. */
+.dcm__layout {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The drawer, and the scrim that makes clicking away close it. It overlays the
+   instrument rather than displacing it, so opening it never resizes the image. */
+.dcm__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.dcm__drawer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 3;
+  width: min(20rem, 82%);
+  display: flex;
+  flex-direction: column;
+  padding: 0.7rem 0.8rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  box-shadow: 2px 0 14px rgba(0, 0, 0, 0.22);
+}
+
+.dcm__drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-ink);
+}
+
+/* The ruled hairline every section head in the app carries, running to the close. */
+.dcm__drawer-head > span:first-child::after {
+  content: '';
+}
+
+.dcm__drawer-head::after {
+  content: '';
+  order: 1;
+  flex: 1;
+  height: 1px;
+  background: var(--c-line);
+}
+
+.dcm__drawer-close {
+  order: 2;
+  width: var(--ctl-h);
+  height: var(--ctl-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--c-muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.dcm__drawer-close:hover {
+  color: var(--c-ink);
+  border-color: var(--c-accent-line);
+  background: var(--c-accent-soft);
+}
+
+/* The trigger wears the app's small plate, so the one control that isn't part of the
+   instrument still belongs to the page. */
+.dcm__drawer-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: var(--ctl-h);
+  padding: 0.28rem 0.6rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+  background: var(--c-surface);
+  border: 1px solid var(--c-accent-line);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.dcm__drawer-toggle:hover {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent);
+}
+
+.dcm__drawer-toggle svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* The study list scrolls inside the drawer. The right padding is real breathing room
+   between the series cards and the scrollbar, not a hairline. */
+.dcm__studies {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.7rem;
+}
+
+/* The viewer: a flex column filling its track; the stage absorbs the spare height, so
+   the image sizes to the viewport with no vh arithmetic. Immovable by construction. */
+.dcm__viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* The INSTRUMENT is the only element that gives up space; the footer keeps its natural
+   height. (This used to name the stage — which stopped being a direct child when the
+   stage and its controls became one unit, and a flex:none instrument collapsed to the
+   height of its own control strip.) Inside the instrument the same rule applies one
+   level down: the strip is flex:none and the stage absorbs what's left. */
+.dcm__viewer > *:not(.dcm__instrument) {
+  flex: none;
+}
+
+@media (max-width: 640px) {
+  /* On a phone the columns stack — release the fixed-viewport frame and let the page
+     scroll as a normal document. */
+  .dcm { height: auto; overflow: visible; }
+  .dcm__layout { grid-template-columns: 1fr; }
+  .dcm__studies { height: auto; overflow: visible; }
+  .dcm__viewer { height: auto; }
+}
+
+/* Study/series picker (left column). Each study is a collapsible <details>; collapsed is
+   the default, so the tight margin is the common case and an OPEN study earns the extra
+   separation that keeps its series list visually attached to its own header. */
+.dcm__study {
+  margin-bottom: 0.3rem;
+}
+
+.dcm__study[open] {
+  margin-bottom: 1rem;
+}
+
+/* The whole header row is the disclosure target, so it gets the padding and hover of a
+   control rather than the bare text it used to be. */
+.dcm__study-head {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.35rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.dcm__study-head:hover {
+  background: var(--c-accent-soft);
+}
+
+/* The date is what you scan the picker by, so it is the figure — same treatment as the
+   Documents index and the readings tables. */
+.dcm__study-date {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+  color: var(--c-ink);
+}
+
+/* Some study descriptions are three concatenated exam names and wrap to 3–4 lines in a
+   260px sidebar, which defeats the point of a compact collapsed index. Clamped to two
+   lines; the full text is one click away in the viewer's metadata. */
+.dcm__study-desc {
+  font-size: 0.8rem;
+  color: var(--c-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* Series/image counts: the only content of a collapsed study beyond its date and
+   description, so it stays legible rather than dropping to the faintest grey. */
+/* Series/image counts are figures too, and the only content of a collapsed study beyond
+   its date and description — so they stay legible rather than dropping to the faintest
+   grey they used to use. */
+.dcm__study-count {
+  margin-top: 0.15rem;
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.7rem;
+  color: var(--c-muted);
+}
+
+.dcm__series-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 0.45rem;   /* aligns with the study header's text, reading as nested */
+  display: grid;
+  gap: 0.3rem;
+}
+
+.dcm__series {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.4rem 0.55rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.dcm__series:hover { border-color: var(--c-accent-line); }
+
+/* The series ON THE STAGE gets a filled left rule as well as the tint — same reason the
+   Documents index does: in a column of near-identical cards, a border-colour change alone
+   is hard to find again after scrolling a 26-series study. */
+.dcm__series--on {
+  border-color: var(--c-accent-line);
+  background: var(--c-accent-soft);
+  box-shadow: inset 3px 0 0 var(--c-accent);
+}
+
+/* The modality (CT/MR/…) is a label, so it takes the label type — and the token tint
+   rather than the leftover violet from before the palette change. */
+.dcm__series-modality {
+  flex: 0 0 auto;
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--c-accent-strong);
+  background: var(--c-accent-soft);
+  border: 1px solid var(--c-accent-line);
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+}
+
+.dcm__series-desc { flex: 1 1 auto; font-size: 0.82rem; }
+
+.dcm__series-count {
+  flex: 0 0 auto;
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Viewer (right column). */
+.dcm__hint { padding: 2rem 0; }
+
+/* THE INSTRUMENT: stage + control strip as one bordered unit, so the controls read as
+   part of the viewer rather than widgets loose on the page under a picture.
+
+   It carries its OWN palette, in both themes. That is the same rule the stage has always
+   followed — "the rendered DICOM stage stays pure black in both themes; it is not chrome,
+   it is the image's own ground" — extended to the strip attached to it: a console does
+   not change colour because the page around it did, and a light control bar under a black
+   stage was the brightest thing on a page you are trying to read greys on. */
+.dcm__instrument {
+  --dcm-strip: #171d23;
+  --dcm-line: #2a323b;
+  --dcm-ink: #e6ebf0;
+  --dcm-muted: #93a1b0;
+  --dcm-btn: #1f2730;
+  --dcm-btn-line: #3a4653;
+  --dcm-on: #9db2c4;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* Fullscreen. The browser gives the element the whole screen and paints its own black
+   behind it; the instrument only has to drop the chrome that framed it INSIDE a page — a
+   border and rounded corners against nothing look like a mistake — and fill what it's
+   given. The stage keeps `flex: 1 1 0`, so the image's fit recomputes through the same
+   ResizeObserver that handles any other resize; nothing here knows it's fullscreen. */
+/* The demo badge, in the app header. Amber because this app's amber means "worth a look",
+   and a pill rather than a plate because it is a LABEL, not a control — the same
+   distinction the timeline's entry tags follow. Sitting in the header costs no vertical
+   space, which is why it moved there: the imaging page hands its whole viewport to a
+   locked stage, and a strip was taking a slice of it on every route. */
+.demo-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-left: 0.9rem;
+  padding: 0.15rem 0.5rem;
+  background: var(--sem-watch-bg);
+  border: 1px solid var(--sem-watch-line);
+  border-radius: 3px;
+  color: var(--sem-watch-ink-2);
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+.demo-badge strong {
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sem-watch-ink);
+}
+
+/* The STATIC build's badge carries a disclosure, so it anchors a panel. `position` is on
+   the badge rather than the panel's own parent because the header is a flex row that
+   would otherwise stretch to fit it. */
+.demo-badge--static { position: relative; }
+
+.demo-badge__more {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--sem-watch-ink);
+  font: inherit;
+  font-size: 0.72rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.demo-badge__more:hover { color: var(--sem-watch-ink-2); }
+
+/* Wider than the badge and left-aligned to it, clamped so it never leaves the viewport on
+   a small window. Prose, so it drops the badge's nowrap. */
+.demo-badge__panel {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  z-index: 60;
+  width: min(34rem, calc(100vw - 2rem));
+  padding: 0.85rem 1rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.18);
+  color: var(--c-ink);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: normal;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.demo-badge__panel p { margin: 0 0 0.6rem; }
+.demo-badge__panel ul { margin: 0 0 0.6rem; padding-left: 1.1rem; }
+.demo-badge__panel li { margin-bottom: 0.35rem; }
+.demo-badge__foot { margin-bottom: 0 !important; color: var(--c-muted); }
+
+/* The sentence is for whoever is being SHOWN the screen; it drops on a narrow window,
+   where it would push the app's own name out. The label never drops. */
+@media (max-width: 760px) {
+  .demo-badge__note { display: none; }
+}
+
+/* The MISMATCH strip stays full width — see DemoBanner. Sticky under the app header,
+   because the moment it has to be visible is the moment someone leans in, which is usually
+   after the page has scrolled. */
+.demo-banner {
+  position: sticky;
+  top: var(--app-header-h, 3.5rem);
+  z-index: 19;                 /* under the app header (20), over every page's own sticky */
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.4rem 1.25rem;
+  border-bottom: 1px solid var(--sem-watch-line);
+  font-size: 0.78rem;
+}
+
+/* The MISMATCH state: started as a demo, connected to a real record. Red rather than
+   amber, because this is not "worth a look" — it is "stop showing this screen". */
+.demo-banner--wrong {
+  background: var(--sem-bad-bg);
+  border-bottom-color: var(--sem-bad-line);
+  color: var(--sem-bad);
+}
+
+.demo-banner--wrong strong {
+  color: var(--sem-bad-strong);
+}
+
+.demo-banner strong {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sem-watch-ink);
+}
+
+.dcm__instrument:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  border: 0;
+  border-radius: 0;
+}
+
+.dcm__strip {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--dcm-strip);
+  border-top: 1px solid var(--dcm-line);
+}
+
+/* Fixed flanks, flexible middle. The tools sit left and the window controls right, both
+   sized by their content, so whatever appears in the status between them cannot move
+   either — which is what the old fixed-height status line was working around. */
+.dcm__strip-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ctl-gap);
+  min-height: var(--ctl-h);
+}
+
+.dcm__slice-range {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--dcm-on);
+}
+
+.dcm__read {
+  flex: none;
+  font-family: var(--font-num);
+  font-size: 0.72rem;
+  color: var(--dcm-muted);
+  white-space: nowrap;
+}
+
+.dcm__read b {
+  color: var(--dcm-ink);
+  font-weight: 400;
+}
+
+.dcm__read--wl {
+  margin-left: 0;
+}
+
+.dcm__link {
+  padding: 0;
+  font: inherit;
+  color: var(--dcm-on);
+  background: none;
+  border: none;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.dcm__stage {
+  position: relative;   /* anchors the decode-error overlay */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  overflow: hidden;     /* clips the frame when zoomed in */
+  touch-action: none;   /* pointer drags (W/L, pan, ROI) aren't page gestures */
+  /* Takes EXACTLY the height left after the slider/presets/metadata (flex-basis 0, not
+     auto — with basis auto the stage starts from the image's own height and doesn't cede
+     enough, clipping the last metadata row). No vh arithmetic. */
+  flex: 1 1 0;
+  min-height: 160px;
+}
+
+.dcm__image {
+  display: block;
+  /* Fills the frame, which JS has already sized to the fitted box (see `fit` in
+     ImagingPage). The canvas's BOX therefore still equals the image's box, which every
+     pointer mapping on this page depends on. */
+  width: 100%;
+  height: 100%;
+  /* DEFAULT IS SMOOTH, and that's a correctness choice, not a taste one. Almost every
+     series here displays BELOW native resolution (512² axials at 58-96%, sagittal
+     reformats at 15-25%), and nearest-neighbour minification DROPS samples instead of
+     averaging them — at 20% scale it keeps ~1 pixel in 5, so a fracture line one or two
+     pixels wide can vanish entirely. Smooth downscaling averages, so a thin feature still
+     darkens its neighbourhood and stays visible. */
+  image-rendering: auto;
+}
+
+/* Only when MAGNIFYING past 1:1 (see the `crisp` effect in ImagingPage): there, showing
+   the true acquired samples is the honest choice — interpolation would invent detail that
+   was never scanned. Applied by measurement, not assumption. */
+.dcm__image--crisp {
+  image-rendering: pixelated;
+}
+
+/* The image + measurement overlay share one wrapper sized to the image, so the SVG
+   (viewBox = image-pixel space) maps 1:1 onto the displayed pixels. The wrapper must
+   itself be bounded by the stage or the img's max-height:100% resolves against nothing. */
+.dcm__frame {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  /* Sized in PIXELS by JS to the aspect-preserving fit (see `fit` in ImagingPage); the
+     max-* are the pre-measurement fallback for the first paint only. It used to be a
+     flex box shrink-wrapping the canvas, and flex's default `align-items: stretch` then
+     forced the canvas to the frame's CLAMPED height while leaving its width alone — so
+     any image taller than the stage was squashed: a 512×1024 coronal rendered 512×748,
+     27% short, with every measurement on it silently wrong in one axis. Eight series in
+     this record are taller than wide (up to 1248×1969), and every sample DICOM is square,
+     which is why only a tall fixture could catch it. */
+  display: block;
+}
+
+.dcm__overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.dcm__stage--measuring { cursor: crosshair; }
+/* Not measuring → dragging adjusts window/level, so advertise the grab affordance. */
+.dcm__stage--wl { cursor: grab; }
+.dcm__stage--wl:active { cursor: grabbing; }
+
+
+.dcm__measure-line {
+  stroke: var(--sem-watch-line);
+  stroke-width: 1.5px;
+  fill: none;
+}
+
+.dcm__measure-dot {
+  fill: var(--sem-watch-line);
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+/* ROI rectangle — same amber annotation family, faint fill so anatomy stays readable. */
+.dcm__measure-rect {
+  fill: rgba(255, 212, 59, 0.12);
+  stroke: var(--sem-watch-line);
+  stroke-width: 1.5px;
+}
+
+
+/* Undecodable slice (compressed transfer syntax, no decoder installed). */
+.dcm__decode-error {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 80%;
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--sem-bad-bg);
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid var(--sem-bad-strong);
+  border-radius: 6px;
+}
+
+/* Tools + window presets on ONE row, always. nowrap (not wrap) is deliberate: a wrapping
+   toolbar changes the column height and resizes the image, which is exactly the squish
+   we just fixed. If a viewer is ever too narrow for the set, the row scrolls sideways
+   instead of growing taller. */
+/* Tools sit at the LEFT end of the second strip row and are sized by their content. */
+.dcm__tools {
+  flex-wrap: nowrap;
+  gap: 0.3rem;
+}
+
+.dcm__tools > button,
+.dcm__windows > button {
+  flex: 0 0 auto;        /* never squash a label to make room */
+}
+
+/* Window controls at the right end. */
+.dcm__windows {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 0.25rem;
+}
+
+/* The status takes the slack BETWEEN the two flanks and clips rather than wraps, so a
+   measurement appearing can neither push a control nor reflow the row (the "selecting
+   Region squishes the image" bug, now prevented by the layout rather than by a
+   hardcoded height). */
+.dcm__status {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--dcm-muted);
+}
+
+.dcm__status .muted { color: var(--dcm-muted); }
+
+/* Whole-series cache progress. Quiet by design — the viewer is fully usable while it
+   fills, so this is a status note, not a blocking spinner. */
+.dcm__preload {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dcm__preload-bar {
+  display: inline-block;
+  width: 4.5rem;
+  height: 0.3rem;
+  background: var(--dcm-btn-line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.dcm__preload-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--dcm-on);
+  border-radius: inherit;
+  transition: width 0.15s linear;
+}
+
+/* Playback speed rides beside Play, the control it belongs to. */
+.dcm__speed {
+  flex: none;
+  padding: 0.1rem 0.25rem;
+  font-family: var(--font-num);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--dcm-ink);
+  background: var(--dcm-btn);
+  border: 1px solid var(--dcm-btn-line);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+/* A measurement IS a figure — the mono face, like every other number the app states. */
+.dcm__measure-value {
+  flex: 0 0 auto;
+  white-space: nowrap; /* never break a number away from its units */
+  font-family: var(--font-num);
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-ink);
+}
+
+/* The closing metadata line is mostly figures (dimensions, slice count), so it takes the
+   mono face — it reads as a spec line under the stage rather than as a sentence. */
+.dcm__footer > .muted:first-child,
+.dcm__footer > span:first-child {
+  font-family: var(--font-num);
+  font-size: 0.78rem;
+}
+
+/* Metadata + collapsed shortcut help on one closing line. */
+.dcm__footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+}
+
+.dcm__keyhelp {
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.dcm__keyhelp > summary {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  cursor: pointer;
+}
+
+.dcm__keyhelp > summary:hover {
+  color: var(--c-ink);
+}
+
+/* Float the expanded help ABOVE the layout so opening it doesn't resize the image. */
+.dcm__keyhelp[open] > p {
+  position: absolute;
+  right: 0;
+  bottom: 1.6rem;
+  z-index: 4;
+  width: max-content;
+  max-width: min(34rem, 60vw);
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  white-space: normal;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(33, 37, 41, 0.12);
+}
+
+@media (max-width: 640px) {
+  /* Stacked flow: the stage has no flexing column to fill, so give it a bound again. */
+  .dcm__stage { flex: none; }
+  .dcm__image { max-height: 60vh; }
+}
+
+
+.dcm__slice-control {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.6rem;
+}
+
+.dcm__slice-control input[type="range"] { flex: 1 1 auto; }
+
+/* "Slice 12 / 984" is a counter — the mono face, so the number doesn't reflow the label
+   beside it as you scrub through a 984-slice series. */
+.dcm__slice-count {
+  flex: 0 0 auto;
+  font-family: var(--font-num);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-muted);
+}
+
+/* The viewer's tools and window presets are the small plate at pill scale: display face,
+   tracked, squared to 3px. They were rounded pills in a page that has no other pill —
+   the only round chrome left once everything else squared off.
+
+   A FIXED height on every control keeps icon buttons and text buttons on the same
+   baseline — differing intrinsic heights under center-alignment left them ~6px apart.
+   `text-transform: uppercase` replaces the old `capitalize`: the labels arrive as preset
+   names ("brain", "soft tissue") and the label type is what makes them read as controls
+   rather than words. */
+/* The strip's buttons: the app's small plate, restated in the instrument's own palette.
+   Same shape, same type, same height token — only the colours belong to the console. */
+.dcm__win {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--ctl-h);
+  padding: 0 0.6rem;
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--dcm-ink);
+  background: var(--dcm-btn);
+  border: 1px solid var(--dcm-btn-line);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+/* Icon-only tools: square, so four of them cost little width. */
+.dcm__win--icon {
+  width: var(--ctl-h);
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.dcm__win:hover {
+  border-color: var(--dcm-on);
+  color: #fff;
+}
+
+.dcm__win--on {
+  color: #11161b;
+  background: var(--dcm-on);
+  border-color: var(--dcm-on);
+}
+
+.dcm__win--on:hover {
+  color: #11161b;
+  background: #c2d2e0;
+  border-color: #c2d2e0;
+}
+
+/* Allowlisted metadata table. */
+
+
+/* Shown in place of the window presets on a series whose values aren't Hounsfield (MR,
+   secondary captures). The tooltip explains why — see ImagingPage's presetsApply. */
+.dcm__nopresets {
+  white-space: nowrap;
+  cursor: help;
+  border-bottom: 1px dotted var(--c-accent-line);
+}
+
+/* ------------------------------------------------------------------ Documents (reports) --
+   The radiology reports that came on the imaging discs. Unlike the imaging page this is an
+   ordinary scrolling document page — there's no viewport-locked stage to protect. */
+/* BREAKS OUT of .app's 820px cap. That cap is a prose-readability choice, and it is
+   right for every other page — but this page displays scanned A4, and inside 820px the
+   list took 260 and left the scan about 530px, too narrow to read a lab table without
+   zooming. left:50% + translateX(-50%) re-centres against the viewport whatever the
+   parent's width is, so it degrades correctly on narrow screens instead of assuming
+   .app is exactly 820. Safe here because this page uses no position:sticky (the panes
+   are a fixed-height grid), which a transformed ancestor would otherwise reparent. */
+.docs {
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(calc(100vw - 2.5rem), 1500px);
+}
+
+.docs__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+/* The page-title serif, like every other page's name. Smaller than the old 1.9rem
+   because this page's title shares its row with a control strip and then hands the
+   viewport to two scrolling panes — the name is an anchor here, not a banner. */
+.docs__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.45rem;
+  font-weight: 600;
+}
+
+/* Two panes that fill the viewport and scroll INDEPENDENTLY: the document list scrolls
+   on the left while the scan stays put on the right. With 51 documents the old
+   page-level scroll pushed the PDF off-screen the moment you went looking for another
+   one — you lost the thing you were reading in order to pick what to read next.
+   `height` rather than `max-height` so the reader has a definite size to give the
+   iframe; the subtracted offset is the app header + page title + filter row. */
+.docs__layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) 1fr;
+  gap: 1.5rem;
+  align-items: stretch;
+  /* Derived, not a magic number: viewport minus the app header, this page's own top and
+     bottom padding, and the title + filter rows above the panes. Same pattern the imaging
+     pane uses, and for the same reason — a hardcoded rem value silently desyncs the moment
+     --page-pad-y changes. */
+  height: calc(100vh - var(--app-header-h) - (2 * var(--page-pad-y)) - 4.25rem);
+  min-height: 420px;
+}
+
+@media (max-width: 720px) {
+  /* Single column: two independently-scrolling panes stacked in a viewport-height box
+     would give each ~200px. Fall back to normal page flow and let the page scroll. */
+  .docs__layout {
+    grid-template-columns: 1fr;
+    height: auto;
+    align-items: start;
+  }
+  /* Bounded scroll rather than the full 51-item list between the filter and the scan. */
+  .docs__list { max-height: 22rem; }
+}
+
+.docs__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+  /* align-content:start stops the items stretching to fill a tall pane; min-height:0
+     is what actually lets a grid child shrink below its content and scroll. */
+  align-content: start;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+}
+
+.docs__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.55rem 0.65rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.docs__item:hover { border-color: var(--c-accent-line); }
+
+/* The open document is marked by a filled LEFT RULE as well as the tint — in a list of
+   51 near-identical cards, a border-colour change alone is hard to find after scrolling. */
+.docs__item--on {
+  border-color: var(--c-accent-line);
+  background: var(--c-accent-soft);
+  box-shadow: inset 3px 0 0 var(--c-accent);
+}
+
+/* The date is what you scan this list by, so it is the figure: mono and tabular, so a
+   column of 51 dates aligns digit for digit. */
+.docs__item-date {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+  color: var(--c-ink);
+}
+
+/* Third line: the source's OWN wording ("Referto di laboratorio") plus a page count, or a
+   match count while searching. The quietest of the three — it qualifies the title above
+   it, so it stays prose rather than taking a label's tracked uppercase (which it briefly
+   did, and which read as the loudest thing in the card). */
+.docs__item-kind {
+  font-size: 0.7rem;
+  line-height: 1.3;
+}
+
+/* Second line: the document's TITLE — what you actually pick by, so it is the card's
+   most legible text after the date. Some study descriptions are three exam names
+   concatenated; clamp so the list stays an index rather than a wall of text (same
+   treatment as the imaging picker). */
+.docs__item-desc {
+  font-size: 0.82rem;
+  color: var(--c-ink);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* A flex column so the header sits at a fixed height and the scan takes the rest.
+   min-height:0 for the same reason the list needs it — without it a grid child refuses
+   to shrink below its content and the iframe pushes the pane past the viewport. */
+.docs__reader {
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  background: var(--c-surface);
+  padding: 0.7rem 0.8rem 0.8rem;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.docs__reader-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.7rem;
+  border-bottom: 1px solid var(--c-line);
+}
+
+/* The document's own name, in the serif that names a thing everywhere else in the app. */
+.docs__reader-title {
+  margin: 0 0 0.2rem;
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+/* Its meta line is a sentence — body face — with the mono scoped to the date it opens
+   with. Setting mono on the whole line put "of the source record" in the figure face. */
+.docs__reader-meta {
+  font-size: 0.8rem;
+}
+
+.docs__reader-date {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+.docs__actions { display: flex; gap: 0.5rem; flex: none; }
+
+/* The reader's one action ("Read lab values") takes the small plate. */
+.docs__action {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.34rem 0.6rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+  text-decoration: none;
+  background: var(--c-surface);
+  border: 1px solid var(--c-accent-line);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.docs__action:hover {
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
+}
+
+/* The report is shown VERBATIM, so its own line breaks are meaningful (they separate the
+   header block, the clinical question, findings and conclusion). pre-wrap keeps them while
+   still wrapping long lines; a reading measure keeps it legible on a wide screen. A body
+   font rather than monospace — this is prose, not code. */
+.docs__text {
+  margin: 0;
+  font-family: inherit;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--c-ink);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  max-width: 68ch;
+}
+
+
+/* The report link inside the imaging study picker. Reads as a link, not a series card, so
+   it can't be mistaken for something that changes the images on the stage. */
+.dcm__report-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin: 0 0 0.4rem 0.45rem;
+  padding: 0.3rem 0;
+  font-size: 0.8rem;
+  color: var(--c-accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.dcm__report-link:hover { color: var(--c-accent-strong); }
+
+/* Active state for a Documents action (the translate toggle when English is showing). */
+/* Pressed: filled, like every other on-state in the app. The outlined hover state and a
+   soft-tint "on" state were too close to tell apart. */
+.docs__action--on {
+  color: var(--c-surface);
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+}
+
+.docs__action--on:hover {
+  background: var(--c-accent-strong);
+  border-color: var(--c-accent-strong);
+}
+
+/* Machine-translation banner. Deliberately prominent and ABOVE the text — the reader has to
+   know a model produced these words before trusting a sentence, not after. Amber rather than
+   the app's violet: this is a caution, not a feature highlight (same visual language as the
+   NLR advisory box). */
+.docs__mt-banner {
+  margin: 0 0 0.9rem;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--sem-watch-ink-2);
+  background: var(--sem-watch-bg);
+  border: 1px solid var(--sem-watch-line);
+  border-radius: 6px;
+}
+
+/* Documents page type filter — 47 split hospital documents plus the radiology reports
+   make a long flat list, and 19 of them are lab printouts. */
+.docs__filter {
+  margin: 0 0 0.7rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+
+/* The filter is a control, so it takes the small plate the timeline's filters and
+   Profile's section actions use — the select itself carries the plate rather than sitting
+   in a bordered box beside a label. */
+.docs__filter select {
+  min-height: var(--ctl-h);
+  padding: 0.28rem 0.5rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+  background: var(--c-surface);
+  border: 1px solid var(--c-accent-line);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.docs__filter select:hover {
+  border-color: var(--c-accent);
+}
+
+/* The scan itself, embedded as the reader's primary view. The browser's own PDF viewer
+   handles zoom, scroll and print better than anything worth building here — and showing
+   the scan rather than its OCR transcription is the point (see DocumentsPage). */
+/* Fills whatever the reader pane has left after its header, instead of a fixed 78vh
+   that overflowed the pane. The browser's PDF viewer scrolls inside it, so paging
+   through a 61-page record never moves the page itself. */
+.docs__pdf {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--c-line);
+  border-radius: 3px;
+  background: var(--c-accent-soft);
+}
+
+@media (max-width: 720px) {
+  .docs__pdf { height: 70vh; flex: none; }
+}
+
+/* A search snippet is a LOCATOR into the scan, not the document's content — OCR text,
+   so it is deliberately quieter than the title it sits under. */
+.docs__item-snippet {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--c-muted);
+  font-style: italic;
+}
+
+/* Documents toolbar: type filter left, search right. */
+.docs__filter {
+  display: flex;
+  align-items: center;
+  gap: var(--ctl-gap);
+}
+
+/* Search sits at the right end of the toolbar. The control is the shared SearchField, so
+   everything about its look (and its expansion) lives with that component — this rule
+   only says where it goes. */
+.docs__search {
+  margin-left: auto;
+}
+
+/* Reader body: the scan alone, or the scan beside the OCR candidates. Splitting rather
+   than stacking is the whole point of this panel — a candidate value is only checkable
+   against the page it came from. */
+.docs__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
