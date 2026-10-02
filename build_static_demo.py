@@ -151,7 +151,7 @@ class Backend:
 # a mirrored path needs %2F in the request, and a great many static hosts — nginx, S3,
 # GitHub Pages — reject or silently normalize an encoded slash. Sixteen more contain
 # spaces, where the server decoding %20 then had to find a file literally named with a
-# space. Both問 make correctness depend on the host's URL handling. A name containing only
+# space. Both make correctness depend on the host's URL handling. A name containing only
 # [A-Za-z0-9._-] depends on nothing.
 #
 # The hash is what keeps it injective: slugging alone maps "a/b" and "a b" to the same
