@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { NavLink } from 'react-router-dom'
+import PortfolioLinks from './PortfolioLinks'
 
 // The nav sections, in the fixed order. Every entry is now a real page — the last
 // "Coming soon" stub (Immunizations) became a Profile tab with real records, and the
@@ -71,6 +72,7 @@ export default function NavDrawer({ open, onClose }) {
             ))}
           </ul>
         </nav>
+        <PortfolioLinks placement="drawer" />
       </div>
     </>
   )

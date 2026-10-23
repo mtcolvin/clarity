@@ -4970,6 +4970,59 @@ select option {
   .demo-badge__note { display: none; }
 }
 
+/* The published demo's links out (PortfolioLinks). Pushed to the right of the header and
+   drawn as the app's small plate, so they read as controls of this bar rather than as part
+   of the record. Below 560px the header copy hides and the drawer copy (at the foot of the
+   nav drawer, full width) takes over: even as bare icons they overflowed a 390px phone, and
+   wrapping the header would change the height the full-viewport panes subtract. */
+.portfolio-links {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.portfolio-links__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: var(--ctl-h);
+  padding: 0.28rem 0.6rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--c-accent);
+  background: var(--c-surface);
+  border: 1px solid var(--c-accent-line);
+  border-radius: 3px;
+  text-decoration: none;
+}
+
+.portfolio-links__link:hover {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent);
+}
+
+.portfolio-links__link svg { margin-left: 0 !important; }
+
+.portfolio-links--drawer {
+  display: none;
+  flex-direction: column;
+  align-items: stretch;
+  margin: 1rem 1rem 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--c-line);
+}
+.portfolio-links--drawer .portfolio-links__link { justify-content: center; min-height: 2.25rem; }
+
+@media (max-width: 560px) {
+  .portfolio-links--header { display: none; }
+  .portfolio-links--drawer { display: flex; }
+}
+
 /* The MISMATCH strip stays full width — see DemoBanner. Sticky under the app header,
    because the moment it has to be visible is the moment someone leans in, which is usually
    after the page has scrolled. */
