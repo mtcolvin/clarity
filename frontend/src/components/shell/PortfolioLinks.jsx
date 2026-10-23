@@ -15,12 +15,23 @@ import { ExternalLinkIcon } from '../icons'
 // move to the foot of the nav drawer instead (`placement="drawer"`). Both copies are always
 // rendered and CSS shows exactly one of them, so the choice follows the window, not a guess
 // made once at load.
+//
+// And only on the HOST they belong to (`VITE_DEMO_LINKS_HOST`): the same build is reachable
+// at the repo's github.io address too, and there a "back to blot.world" button would claim
+// a visitor came from a site they never saw. Checked at runtime, since one artifact is
+// served under both names.
 const HOME_URL = import.meta.env.VITE_DEMO_HOME_URL
 const HOME_LABEL = import.meta.env.VITE_DEMO_HOME_LABEL || 'Back'
 const REPO_URL = import.meta.env.VITE_DEMO_REPO_URL
+const LINKS_HOST = import.meta.env.VITE_DEMO_LINKS_HOST
+
+function onLinksHost() {
+  if (!LINKS_HOST) return true
+  return typeof window !== 'undefined' && window.location.hostname === LINKS_HOST
+}
 
 export default function PortfolioLinks({ placement = 'header' }) {
-  if (!STATIC_DEMO || (!HOME_URL && !REPO_URL)) return null
+  if (!STATIC_DEMO || (!HOME_URL && !REPO_URL) || !onLinksHost()) return null
   return (
     <nav className={`portfolio-links portfolio-links--${placement}`} aria-label="About this demo">
       {HOME_URL && (
