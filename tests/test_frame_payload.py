@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import shutil
 import subprocess
 
@@ -133,7 +134,7 @@ def test_voi_matches_the_javascript(fn):
             return {"VOILUTFunction": fn}.get(k, default)
 
     script = (
-        f"const m = await import({json.dumps('file:///' + FRAME_JS.replace(os.sep, '/'))});"
+        f"const m = await import({json.dumps(pathlib.Path(FRAME_JS).as_uri())});"
         f"const vals = {json.dumps(values)};"
         f"const wins = {json.dumps(windows)};"
         "const out = [];"

@@ -294,9 +294,16 @@ def _partition_paths(root: str, part: str) -> list[str]:
             return []
         paths = [os.path.join(root, n) for n in names if not _is_cache_file(n)]
         return [p for p in paths if os.path.isfile(p)]
+    # Sorted, like the root branch above: os.walk yields in directory order, which is
+    # alphabetical on NTFS but arbitrary on ext4, and the instance sort in _finalize is
+    # stable — so slices sharing an InstanceNumber (and series sharing a SeriesNumber)
+    # would otherwise come out in a different order depending on the filesystem.
     base = os.path.join(root, part)
-    return [os.path.join(dp, n) for dp, _d, files in os.walk(base) for n in files
-            if not _is_cache_file(n)]
+    paths = []
+    for dp, dirs, files in os.walk(base):
+        dirs.sort()
+        paths.extend(os.path.join(dp, n) for n in sorted(files) if not _is_cache_file(n))
+    return paths
 
 
 def scan_studies(root: str | None = None) -> list[dict]:
