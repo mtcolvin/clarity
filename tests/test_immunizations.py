@@ -23,14 +23,14 @@ import db
 # ---- db layer ------------------------------------------------------------------
 
 def test_add_and_list(db_conn):
-    db.add_immunization(db_conn, "Influenza (quadrivalent)", administered_on="2025-10-02",
+    db.add_immunization(db_conn, "Influenza (quadrivalent)", administered_on="2025-11-08",
                         dose_label="2025-26 season", amount="0.5 mL", site="left deltoid",
                         lot="AB1234", notes="pharmacy")
     rows = db.list_immunizations(db_conn)
     assert len(rows) == 1
     r = rows[0]
     assert r["vaccine"] == "Influenza (quadrivalent)"
-    assert r["administered_on"] == "2025-10-02"
+    assert r["administered_on"] == "2025-11-08"
     assert (r["dose_label"], r["site"], r["lot"]) == ("2025-26 season", "left deltoid", "AB1234")
 
 
@@ -76,7 +76,7 @@ def test_undated_records_sort_last(db_conn):
 
 
 def test_update_replaces_every_field(db_conn):
-    iid = db.add_immunization(db_conn, "Influenza", administered_on="2025-10-02",
+    iid = db.add_immunization(db_conn, "Influenza", administered_on="2025-11-08",
                               site="left deltoid")
     assert db.update_immunization(db_conn, iid, vaccine="Influenza (high-dose)",
                                   administered_on="2025-10-03", site="right deltoid",
@@ -102,7 +102,7 @@ def test_delete(db_conn):
 
 def test_crud_routes(client):
     created = client.post("/immunizations", json={
-        "vaccine": "Influenza (quadrivalent)", "administered_on": "2025-10-02",
+        "vaccine": "Influenza (quadrivalent)", "administered_on": "2025-11-08",
         "dose_label": "2025-26 season", "site": "left deltoid",
     })
     assert created.status_code == 201
@@ -112,7 +112,7 @@ def test_crud_routes(client):
     assert [r["vaccine"] for r in listed] == ["Influenza (quadrivalent)"]
 
     edited = client.put(f"/immunizations/{iid}", json={
-        "vaccine": "Influenza (high-dose)", "administered_on": "2025-10-02",
+        "vaccine": "Influenza (high-dose)", "administered_on": "2025-11-08",
         "amount": "0.5 mL",
     })
     assert edited.status_code == 200
@@ -156,13 +156,13 @@ def test_immunizations_reach_no_analysis_surface(client):
 
 def test_dated_immunization_appears_on_the_timeline(client):
     client.post("/immunizations", json={
-        "vaccine": "Influenza (quadrivalent)", "administered_on": "2025-10-02",
+        "vaccine": "Influenza (quadrivalent)", "administered_on": "2025-11-08",
         "dose_label": "2025-26 season", "site": "left deltoid",
     })
     entries = [e for e in client.get("/timeline").json() if e["kind"] == "immunization"]
     assert len(entries) == 1
     e = entries[0]
-    assert e["date"] == "2025-10-02"
+    assert e["date"] == "2025-11-08"
     assert e["title"] == "Influenza (quadrivalent)"
     assert e["detail"]["dose_label"] == "2025-26 season"
     # it links to the tab that owns the record, rather than being editable in place

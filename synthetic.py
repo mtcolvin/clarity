@@ -185,10 +185,10 @@ def seed_db(conn) -> None:
                     notes="Dose increased to 100 mcg; repeat TSH in eight weeks.")
     dbmod.add_event(conn, "2026-06-18", "visit", "Annual physical")
 
-    dbmod.add_immunization(conn, "Influenza (quadrivalent)", administered_on="2025-10-02",
+    dbmod.add_immunization(conn, "Influenza (quadrivalent)", administered_on="2025-11-08",
                            dose_label="2025-26 season", amount="0.5 mL",
                            site="left deltoid", lot="DEMO-1")
-    dbmod.add_immunization(conn, "Tdap", administered_on="2023-12-05", amount="0.5 mL",
+    dbmod.add_immunization(conn, "Tdap", administered_on="2023-08-23", amount="0.5 mL",
                            site="right deltoid", lot="DEMO-2")
     dbmod.add_immunization(conn, "Measles, mumps, rubella")   # undated, as a paper-card record
 
