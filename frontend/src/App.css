@@ -5010,9 +5010,9 @@ select option {
 
 /* The home link is blot.world's own mini nav (css/minimal-nav.css there), so it reads as that
    site's control: a 170x40 frosted pill, the BLOT mark cut clean through it, the wordmark's
-   weight stepping down letter by letter and evening out on hover. Its tint is this app's
-   soft-accent token rather than a per-page colour, so it follows the theme like the rest of
-   the header. The face is a self-hosted ~3 KB subset (see PortfolioLinks.jsx), small enough
+   weight stepping down letter by letter and evening out on hover. Its tint is mixed from
+   this app's ink and surface tokens rather than a per-page colour, so it follows the theme
+   like the rest of the header. The face is a self-hosted ~3 KB subset (see PortfolioLinks.jsx), small enough
    that Vite inlines it into this stylesheet as a data URI — so it never costs a request,
    and nothing is ever fetched from a font CDN. */
 @font-face {
@@ -5038,7 +5038,9 @@ select option {
 .mininav__blur {
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--c-accent-soft) 95%, transparent);
+  /* 14% ink over the header's own surface: the soft-accent tint (#222a33 on #171d23) was
+     too close to the bar to read as a control. Mixing from ink keeps it theme-correct. */
+  background: color-mix(in srgb, var(--c-ink) 14%, var(--c-surface));
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   pointer-events: none;
