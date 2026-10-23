@@ -63,7 +63,19 @@ jobs:
         # A broken demo is worse than a stale one, and this is the last point at which
         # that is cheap to notice. Includes the check that the crawler's filenames and
         # the client's agree, which is the failure that would publish empty pages.
-        run: pytest -q
+        #
+        # On failure the tail of pytest's output is also raised as an annotation, so the
+        # reason shows on the run's summary page (and in the public check-run API) rather
+        # than only inside the step log. CI only ever holds code and the invented record.
+        run: |
+          set +e
+          pytest -q 2>&1 | tee pytest.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            msg=$(tail -n 60 pytest.log | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=pytest exited $status::$msg"
+          fi
+          exit "$status"
 
       - name: Seed the invented record
         run: python -m demo_store_setup
