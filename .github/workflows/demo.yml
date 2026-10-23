@@ -21,6 +21,8 @@ on:
       - '**.py'
       - 'frontend/**'
       - 'requirements.txt'
+      - 'requirements-dev.txt'
+      - 'pytest.ini'
       - 'schema.sql'
       - '.github/workflows/demo.yml'
   workflow_dispatch:        # and on demand, from the Actions tab
