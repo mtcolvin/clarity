@@ -125,7 +125,7 @@ def _seed(db_path: str) -> None:
     dbmod.add_medication(conn, "Sample medication", dose="10 mg", frequency="once daily",
                          start_date="2025-11-05")
     dbmod.add_event(conn, "2026-02-14", "visit", "Sample visit", notes="invented")
-    dbmod.add_immunization(conn, "Influenza (quadrivalent)", administered_on="2025-10-02",
+    dbmod.add_immunization(conn, "Influenza (quadrivalent)", administered_on="2025-11-08",
                            dose_label="2025-26 season", amount="0.5 mL",
                            site="left deltoid", lot="SAMPLE1", notes="invented record")
     dbmod.add_immunization(conn, "Sample childhood vaccine")   # undated on purpose
