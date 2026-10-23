@@ -5008,6 +5008,102 @@ select option {
 
 .portfolio-links__link svg { margin-left: 0 !important; }
 
+/* The home link is blot.world's own mini nav (css/minimal-nav.css there), so it reads as that
+   site's control: a 170x40 frosted pill, the BLOT mark cut clean through it, the wordmark's
+   weight stepping down letter by letter and evening out on hover. Its tint is this app's
+   soft-accent token rather than a per-page colour, so it follows the theme like the rest of
+   the header. The face is a self-hosted ~3 KB subset (see PortfolioLinks.jsx), small enough
+   that Vite inlines it into this stylesheet as a data URI — so it never costs a request,
+   and nothing is ever fetched from a font CDN. */
+@font-face {
+  font-family: 'Roboto Flex BLOT';
+  src: url('./assets/fonts/roboto-flex-blotworld.woff2') format('woff2');
+  font-weight: 100 1000;
+  font-display: swap;
+}
+
+.mininav {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  width: 170px;
+  height: 40px;
+  border-radius: 10px;
+  overflow: hidden;
+  color: var(--c-ink);
+  text-decoration: none;
+}
+
+.mininav__blur {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--c-accent-soft) 95%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.mininav__bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.mininav__rect { fill: transparent; }
+
+.mininav__inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding-left: 0.5rem;
+  font-weight: 600;
+  user-select: none;
+}
+
+.mininav__arrow {
+  flex: none;
+  margin-right: 1.75rem;
+  transition: transform 0.3s ease;
+}
+.mininav:hover .mininav__arrow,
+.mininav:focus-visible .mininav__arrow { transform: translateX(-4px); }
+
+.mininav__title {
+  display: flex;
+  margin-left: auto;
+  padding-right: 0.45rem;
+  font-family: 'Roboto Flex BLOT', 'Segoe UI', sans-serif;
+  font-size: 16px;
+  letter-spacing: -1px;
+}
+.mininav__title span { display: inline-block; transition: all 0.3s ease; }
+.mininav__title span:nth-child(1) { font-weight: 900; }
+.mininav__title span:nth-child(2) { font-weight: 820; }
+.mininav__title span:nth-child(3) { font-weight: 740; }
+.mininav__title span:nth-child(4) { font-weight: 660; }
+.mininav__title span:nth-child(5) { font-weight: 580; }
+.mininav__title span:nth-child(6) { font-weight: 500; }
+.mininav__title span:nth-child(7) { font-weight: 420; }
+.mininav__title span:nth-child(8) { font-weight: 340; }
+.mininav__title span:nth-child(9) { font-weight: 260; }
+.mininav__title span:nth-child(10) { font-weight: 180; }
+.mininav:hover .mininav__title span,
+.mininav:focus-visible .mininav__title span { font-weight: 600; }
+
+.mininav:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+
+.portfolio-links--drawer .mininav { align-self: center; }
+
+/* Keep the header its usual height: the pill is 40px (blot.world's size) against the menu
+   button's ~38.8px, which grew the bar by 1.2px — and the imaging/documents panes subtract
+   a FIXED header height from the viewport. A negative block margin keeps the pill's size
+   without letting it set the row's height. */
+.portfolio-links--header .mininav { margin-block: -1px; }
+
 .portfolio-links--drawer {
   display: none;
   flex-direction: column;
