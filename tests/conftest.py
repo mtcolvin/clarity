@@ -41,6 +41,18 @@ def _isolate_audit_log(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_database(tmp_path, monkeypatch):
+    """Point api.DB_PATH at an empty per-test file for EVERY test. The `client` fixture
+    rebinds it to a seeded DB, but a test that builds TestClient(api.app) itself never
+    passes through that fixture — and then reads whatever DB_PATH defaults to, which on
+    the owner's machine is the REAL health.db. Found when three /timeline tests in
+    test_reports.py failed on a fresh CI checkout ("no such table") after silently
+    reading the real record locally for as long as they had existed. An unseeded file
+    makes that mistake fail LOUDLY instead."""
+    monkeypatch.setattr(api, "DB_PATH", str(tmp_path / "unseeded.db"))
+
+
+@pytest.fixture(autouse=True)
 def _isolate_imaging_store(tmp_path, monkeypatch):
     """Point the DICOM store at an empty per-test folder for EVERY test. Without this,
     any test touching /timeline (which now includes imaging entries) or /imaging would

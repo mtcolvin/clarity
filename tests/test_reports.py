@@ -17,9 +17,7 @@ import json
 import os
 
 import pytest
-from fastapi.testclient import TestClient
 
-import api
 import reports
 
 ACCESSION = "ATCAN9999001"
@@ -122,9 +120,8 @@ def test_available_is_false_without_an_archive(tmp_path, monkeypatch):
 
 # ------------------------------------------------------------------------------ routes
 
-def test_routes_serve_list_text_and_pdf(archive):
+def test_routes_serve_list_text_and_pdf(archive, client):
     archive("cd1")
-    client = TestClient(api.app)
 
     index = client.get("/reports").json()
     assert index["available"] is True and len(index["reports"]) == 1
@@ -141,24 +138,22 @@ def test_routes_serve_list_text_and_pdf(archive):
     assert pdf.content.startswith(b"%PDF")
 
 
-def test_routes_404_on_an_unknown_report(archive):
+def test_routes_404_on_an_unknown_report(archive, client):
     archive("cd1")
-    client = TestClient(api.app)
     assert client.get("/reports/nosuchid").status_code == 404
     assert client.get("/reports/nosuchid/pdf").status_code == 404
 
 
-def test_index_degrades_honestly_without_an_archive(tmp_path, monkeypatch):
+def test_index_degrades_honestly_without_an_archive(tmp_path, monkeypatch, client):
     monkeypatch.setattr(reports, "ARCHIVE_DIR", str(tmp_path / "nothing here"))
-    body = TestClient(api.app).get("/reports").json()
+    body = client.get("/reports").json()
     assert body["available"] is False
     assert body["reports"] == []
     assert body["reason"]
 
 
-def test_a_report_with_no_pdf_reports_only_text(archive):
+def test_a_report_with_no_pdf_reports_only_text(archive, client):
     archive("cd1", pdf=None)
-    client = TestClient(api.app)
     rid = client.get("/reports").json()["reports"][0]["id"]
     assert client.get(f"/reports/{rid}").json()["formats"] == ["text"]
     assert client.get(f"/reports/{rid}/pdf").status_code == 404
@@ -183,13 +178,13 @@ def _study_with_report(archive, tmp_path, monkeypatch):
     monkeypatch.setattr(dicom_store, "_scan_cache", {})
 
 
-def test_the_report_rides_on_its_imaging_entry(archive, tmp_path, monkeypatch):
+def test_the_report_rides_on_its_imaging_entry(archive, tmp_path, monkeypatch, client):
     """A report is NOT a separate dated event — it is the written half of the same exam, so
     it belongs INSIDE the imaging entry rather than as a second row that happens to share a
     date. Two rows made one thing look like two."""
     _study_with_report(archive, tmp_path, monkeypatch)
 
-    timeline = TestClient(api.app).get("/timeline").json()
+    timeline = client.get("/timeline").json()
     assert [e for e in timeline if e["kind"] == "report"] == [], "no separate report entry"
 
     imaging = [e for e in timeline if e["kind"] == "imaging"]
@@ -203,17 +198,17 @@ def test_the_report_rides_on_its_imaging_entry(archive, tmp_path, monkeypatch):
     assert BODY not in json.dumps(timeline)
 
 
-def test_timeline_entries_carry_no_presentational_ranking(archive, tmp_path, monkeypatch):
+def test_timeline_entries_carry_no_presentational_ranking(archive, tmp_path, monkeypatch, client):
     """Every entry reads with equal weight. The old `prominence` tier is gone from the
     payload entirely — deciding what deserves attention is the reader's job, and the kind
     filters are the tool for it."""
     _study_with_report(archive, tmp_path, monkeypatch)
-    timeline = TestClient(api.app).get("/timeline").json()
+    timeline = client.get("/timeline").json()
     assert timeline
     assert all("prominence" not in e for e in timeline)
 
 
-def test_a_study_without_a_report_carries_an_empty_list(archive, tmp_path, monkeypatch):
+def test_a_study_without_a_report_carries_an_empty_list(archive, tmp_path, monkeypatch, client):
     """An imaging study whose disc carried no report still renders — the field is present
     and empty rather than missing, so the client needs no special case."""
     pydicom = pytest.importorskip("pydicom")
@@ -229,7 +224,7 @@ def test_a_study_without_a_report_carries_an_empty_list(archive, tmp_path, monke
     monkeypatch.setattr(dicom_store, "IMAGING_DIR", str(store))
     monkeypatch.setattr(dicom_store, "_scan_cache", {})
 
-    imaging = [e for e in TestClient(api.app).get("/timeline").json() if e["kind"] == "imaging"]
+    imaging = [e for e in client.get("/timeline").json() if e["kind"] == "imaging"]
     assert len(imaging) == 1
     assert imaging[0]["detail"]["reports"] == []
     assert len(reports.list_reports()) == 1       # still listed as a document
@@ -237,7 +232,7 @@ def test_a_study_without_a_report_carries_an_empty_list(archive, tmp_path, monke
 
 # ------------------------------------------------------------- linking reports to studies
 
-def test_report_links_to_its_study_by_accession(archive, tmp_path, monkeypatch):
+def test_report_links_to_its_study_by_accession(archive, tmp_path, monkeypatch, client):
     """The accession is the only reliable link: the archive and the image store do NOT agree
     on folder names (the first disc is `cd1` in one and `cd-import` in the other), so a
     folder-name join would be wrong. Build a DICOM study carrying the accession and check the
@@ -260,7 +255,7 @@ def test_report_links_to_its_study_by_accession(archive, tmp_path, monkeypatch):
     assert reports.reports_by_study().get(study_id) == [reports.list_reports()[0]["id"]]
 
     # ...and the imaging route surfaces it, so the viewer can offer the report beside images.
-    studies = TestClient(api.app).get("/imaging/studies").json()["studies"]
+    studies = client.get("/imaging/studies").json()["studies"]
     assert studies[0]["report_ids"] == [reports.list_reports()[0]["id"]]
     # The accession still doesn't leak through the imaging route.
     assert ACCESSION not in str(studies)
