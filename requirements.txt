@@ -5,6 +5,10 @@ scipy==1.17.1
 # API layer (api.py)
 fastapi==0.136.3
 uvicorn[standard]==0.49.0
+# Pinned although FastAPI pulls it in: FastAPI's own range let a fresh install resolve a
+# newer Starlette whose TestClient needs a different HTTP client (httpx2) than the one
+# this project is tested with, which failed CI before a single test ran.
+starlette==1.2.1
 
 # Local DICOM viewer (dicom_store.py). pydicom (MIT) parses; Pillow (HPND/MIT-CMU)
 # encodes rendered slices to PNG; both are local-only, no system dependency. The viewer
