@@ -5,6 +5,9 @@ documents and history on one timeline, on your own machine, and points at the th
 in your own data that stand out — so you can ask better questions at your next
 appointment.
 
+**[Try the live demo](https://clarity.blot.world/)**: a read-only snapshot running on an
+invented record. It describes no real person.
+
 **Clarity does not diagnose, and is not a medical device.** It surfaces and describes;
 it never tells you what a result means for your health. Every finding is framed as
 something to raise with a clinician. See [Safety](#safety-surface-never-diagnose).
@@ -132,6 +135,11 @@ every push — tests, seed, build, then a check that the built artifact actually
 before anything is deployed. Enable it once under **Settings → Pages → Source: GitHub
 Actions**. The demo store is generated during the run and is not in this repository, so
 there is no committed record for the workflow to publish.
+
+This repository's demo is served at [clarity.blot.world](https://clarity.blot.world/), a
+custom domain set in those same Pages settings. The `VITE_DEMO_*` values in
+`frontend/.env.static` add links back to the author's site and to this repository, shown
+only on that host. A fork publishing its own demo changes or deletes them.
 
 ## Detectors
 
