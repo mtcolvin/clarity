@@ -176,6 +176,9 @@ const IDENTITY_VIEW = { zoom: 1, tx: 0, ty: 0 }
 // column height and resize the image, which is the thing we just fixed.
 const TOOL_ICONS = { distance: DistanceIcon, angle: AngleIcon, roi: RegionIcon }
 const TOOL_NAMES = { distance: 'Distance', angle: 'Angle', roi: 'Region' }
+// The presets a non-HU series gets: ONE shared empty object, not a fresh `{}` per render,
+// which would change the keyboard effect's dependencies on every render.
+const NO_PRESETS = Object.freeze({})
 // Short labels + a plain-language tooltip: a preset is a window/level pair tuned to make
 // one tissue type readable, and the names alone don't say that.
 const PRESET_LABELS = { 'soft-tissue': 'Soft', brain: 'Brain', bone: 'Bone', lung: 'Lung' }
@@ -192,7 +195,10 @@ function Viewer({ series, presets, presetsUnits }) {
   const [mode, setMode] = useState('off')   // 'off' | 'distance' | 'angle' | 'roi'
   const [points, setPoints] = useState([])
   const [rect, setRect] = useState(null)    // ROI rectangle in image-pixel coords
-  const [roi, setRoi] = useState(null)      // fetched statistics for `rect`
+  // Fetched statistics, tagged with the rectangle + slice they describe, so a stale result
+  // is never shown for a different (or cleared) rectangle. See the ROI effect.
+  const [roiResult, setRoiResult] = useState(null)   // { rect, index, stats }
+  const roi = roiResult && roiResult.rect === rect && roiResult.index === index ? roiResult.stats : null
   const [view, setView] = useState(IDENTITY_VIEW)   // zoom + pan
   const [playing, setPlaying] = useState(false)
   const [fps, setFps] = useState(CINE_FPS_DEFAULT)
@@ -227,7 +233,7 @@ function Viewer({ series, presets, presetsUnits }) {
   // dependent — a "bone 500/2000" window renders a near-black frame while implying a
   // calibration that doesn't exist, so they're hidden rather than shown-and-broken.
   const presetsApply = !presetsUnits || series.value_units === presetsUnits
-  const usablePresets = presetsApply ? presets : {}
+  const usablePresets = presetsApply ? presets : NO_PRESETS
   // What the window controls actually resolve to right now — the explicit choice, else
   // the file's own calibration, else a mid-grey CT default so dragging has a sane origin.
   // What the window controls actually resolve to right now. `frameDefault` is the window
@@ -239,22 +245,21 @@ function Viewer({ series, presets, presetsUnits }) {
   // window nothing had been drawn at. Now one number governs both.
   const effWin = win || frameDefault || series.default_window || { wc: 40, ww: 400 }
 
-  // Reset per series.
-  useEffect(() => {
-    setIndex(0); setWin(null); setFrameDefault(null); setMode('off'); setPoints([])
-    setRect(null); setRoi(null); setView(IDENTITY_VIEW); setPlaying(false)
-  }, [series.id])
+  // No per-series reset here: the page mounts Viewer with key={selected.id}, so a new
+  // series is a new component and every piece of state starts from its initial value.
   // A measurement belongs to ONE slice — a line or ROI left hovering over different anatomy
   // would misrepresent it — so annotations clear on any slice change, and on mode change.
-  // Written as no-op-when-already-empty updaters ON PURPOSE. `setPoints([])` with a fresh
-  // array always changes the reference, so this effect used to force a SECOND render pass
-  // on every slice change — during cine, two renders per frame at 20/s for nothing, since
-  // there is almost never an annotation to clear.
-  useEffect(() => {
-    setPoints((p) => (p.length ? [] : p))
-    setRect((r) => (r ? null : r))
-    setRoi((r) => (r ? null : r))
-  }, [index, mode])
+  // Done DURING render when (index, mode) changes (React's "adjust state when a prop
+  // changes" pattern), not in an effect: an effect commits a frame with the stale
+  // annotation and then renders again. The clears only run when something is actually
+  // there, so a cine (a new index 20×/s, almost never an annotation) costs nothing extra.
+  const sliceKey = `${index}|${mode}`
+  const [annotatedFor, setAnnotatedFor] = useState(sliceKey)
+  if (annotatedFor !== sliceKey) {
+    setAnnotatedFor(sliceKey)
+    if (points.length) setPoints([])
+    if (rect) setRect(null)
+  }
 
   const toggleFullscreen = useCallback(() => {
     const el = instrumentRef.current
@@ -301,11 +306,11 @@ function Viewer({ series, presets, presetsUnits }) {
   // the real pixel values — a mean computed from display grey would be a fiction. Fetched
   // once per completed rectangle.
   useEffect(() => {
-    if (!rect || rect.w < 2 || rect.h < 2) { setRoi(null); return undefined }
+    if (!rect || rect.w < 2 || rect.h < 2) return undefined
     let cancelled = false
     getImagingRoi(series.id, index, rect)
-      .then((r) => !cancelled && setRoi(r))
-      .catch(() => !cancelled && setRoi(null))
+      .then((r) => !cancelled && setRoiResult({ rect, index, stats: r }))
+      .catch(() => !cancelled && setRoiResult({ rect, index, stats: null }))
     return () => { cancelled = true }
   }, [rect, series.id, index])
 
@@ -607,7 +612,7 @@ function Viewer({ series, presets, presetsUnits }) {
     }
     stage.addEventListener('wheel', onWheel, { passive: false })
     return () => stage.removeEventListener('wheel', onWheel)
-  }, [last]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [last])
 
   // Map a click to IMAGE-pixel coordinates. The SVG overlay shares that coordinate system
   // via its viewBox, so drawing needs no scaling at any display size.
@@ -645,7 +650,6 @@ function Viewer({ series, presets, presetsUnits }) {
       if (!p) return
       roiDragRef.current = p
       setRect({ x: p.x, y: p.y, w: 0, h: 0 })
-      setRoi(null)
     } else if (mode === 'off') {
       dragRef.current = { x: e.clientX, y: e.clientY, wc: effWin.wc, ww: effWin.ww }
     } else {
@@ -863,7 +867,7 @@ function Viewer({ series, presets, presetsUnits }) {
               {roi.area_mm2 != null && ` · ${Math.round(roi.area_mm2)} mm²`}
             </span>
             <button type="button" className="dcm__link"
-                    onClick={() => { setRect(null); setRoi(null) }}>Clear</button>
+                    onClick={() => setRect(null)}>Clear</button>
           </>
         )}
         {preload && preload.done < preload.total && (
@@ -973,19 +977,21 @@ export default function ImagingPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [drawerOpen])
 
+  // Timeline → viewer deep link: /imaging?study=<id> preselects that study's first series,
+  // so a timeline imaging entry lands on its images, not a blank picker. Resolved where the
+  // studies ARRIVE rather than in an effect reacting to them (a deep link only matters on
+  // arrival; picking a series afterwards is the user's).
   useEffect(() => {
-    getImagingStudies().then(setData).catch((e) => setError(e.message))
-  }, [])
-
-  // Timeline → viewer deep link: /imaging?study=<id> preselects that study's first
-  // series, so a timeline imaging entry lands on its images, not a blank picker.
-  useEffect(() => {
-    if (!data || selected) return
     const wanted = searchParams.get('study')
-    if (!wanted) return
-    const study = data.studies.find((st) => st.id === wanted)
-    if (study && study.series.length > 0) setSelected(study.series[0])
-  }, [data, searchParams, selected])
+    getImagingStudies()
+      .then((d) => {
+        setData(d)
+        const study = wanted && d.studies?.find((st) => st.id === wanted)
+        if (study && study.series.length > 0) setSelected(study.series[0])
+      })
+      .catch((e) => setError(e.message))
+  }, [searchParams])
+
 
   if (error) return <p className="error">Couldn’t reach the API: {error}</p>
   if (!data) return <Loading what="imaging" />

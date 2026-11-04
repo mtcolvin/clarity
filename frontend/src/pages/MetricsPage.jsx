@@ -88,7 +88,9 @@ export default function MetricsPage() {
   const [collectionById, setCollectionById] = useState({})
   // The selected metric's "panel" (metrics sharing a timed collection with it) — drives the
   // "export this panel" multi-metric action. Empty for a metric with no collection.
-  const [panelMetrics, setPanelMetrics] = useState([])
+  // Tagged with the metric it belongs to; shown only while that metric is selected, so a
+  // previous metric's panel never lingers and there's nothing to clear.
+  const [panel, setPanel] = useState({ metric: null, list: [] })
   // Which export flow is open below the header: 'none' | 'metric' | 'set'. The two header
   // buttons toggle it; the export UI renders below the picker so the header stays a header.
   const [exportMode, setExportMode] = useState('none')
@@ -187,17 +189,16 @@ export default function MetricsPage() {
 
   // The selected metric's panel (its collection siblings) for the "export this panel"
   // action — empty for a derived or non-collection metric.
+  const panelApplies = !!selected && !(selected in derivedByMetric)
+  const panelMetrics = panelApplies && panel.metric === selected ? panel.list : []
   useEffect(() => {
-    if (!selected || selected in derivedByMetric) {
-      setPanelMetrics([])
-      return
-    }
+    if (!panelApplies) return undefined
     let cancelled = false
     getMetricPanel(selected)
-      .then((r) => !cancelled && setPanelMetrics(r.panel))
-      .catch(() => !cancelled && setPanelMetrics([]))
+      .then((r) => !cancelled && setPanel({ metric: selected, list: r.panel }))
+      .catch(() => !cancelled && setPanel({ metric: selected, list: [] }))
     return () => { cancelled = true }
-  }, [selected, derivedByMetric])
+  }, [selected, panelApplies])
 
   // Personal-baseline settings for the selected metric. TAGGED with the metric they
   // were fetched for — the same self-correcting trick chartDomain uses above — so the

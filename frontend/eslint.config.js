@@ -31,4 +31,10 @@ export default defineConfig([
       'react-refresh/only-export-components': 'off',
     },
   },
+  {
+    // The app's entry point: it renders the root and exports nothing, so Fast Refresh's
+    // "a component file should only export components" rule has nothing to apply to.
+    files: ['src/main.jsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
 ])

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   getExportEnabled, getSettings, postExportPreview, postExportConfirm,
@@ -100,10 +100,21 @@ export default function ExportPanel({ metric, metrics = null, scopeLabel = '',
     texts: (texts ?? []).map((d) => ({ kind: d.kind, id: d.id, field: d.field, text: d.text })),
   })
 
+  // autoStart: the parent owns the trigger (a header button), so skip the idle button and
+  // go straight to the preview once the gate resolves to enabled. An Effect Event, so the
+  // one-time gate check below reads the CURRENT props and startPreview without re-running.
+  const onGateResolved = useEffectEvent((isEnabled) => {
+    if (autoStart && isEnabled === true) startPreview()
+  })
+
   useEffect(() => {
     let cancelled = false
     getExportEnabled()
-      .then((d) => !cancelled && setEnabled(d.enabled))
+      .then((d) => {
+        if (cancelled) return
+        setEnabled(d.enabled)
+        onGateResolved(d.enabled)
+      })
       .catch(() => !cancelled && setEnabled(false)) // fail closed — never assume enabled
     return () => {
       cancelled = true
@@ -217,13 +228,6 @@ export default function ExportPanel({ metric, metrics = null, scopeLabel = '',
       (d.kind === kind && d.id === id && d.field === field ? { ...d, text } : d)))
     setDraftsDirty(true)
   }
-
-  // autoStart: the parent owns the trigger (a header button), so skip the idle button and
-  // go straight to the preview once the gate check resolves to enabled.
-  useEffect(() => {
-    if (autoStart && enabled === true && panelState === 'idle') startPreview()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoStart, enabled])
 
   function cancelPreview() {
     // Parent-controlled (header button): closing returns to the header, not a lone idle

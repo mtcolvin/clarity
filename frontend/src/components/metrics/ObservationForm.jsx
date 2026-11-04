@@ -113,12 +113,13 @@ export default function ObservationForm({ metrics, derivedMetrics = {}, unitByMe
   const trimmedMetric = metric.trim()
   const mightBeNew = !isEdit && !derivedCaption && trimmedMetric.length >= 3 &&
                      knownUnit == null
-  const [suggestions, setSuggestions] = useState([])
+  // Tagged with the name they were fetched for, and shown only while that name is still
+  // the one being typed (and still might be new): a stale list can't outlive its input,
+  // and there is nothing to clear when it stops applying.
+  const [fetched, setFetched] = useState({ name: null, list: [] })
+  const suggestions = mightBeNew && fetched.name === trimmedMetric ? fetched.list : []
   useEffect(() => {
-    if (!mightBeNew) {
-      setSuggestions([])
-      return
-    }
+    if (!mightBeNew) return undefined
     let cancelled = false
     // Debounced so typing doesn't hammer the endpoint.
     const t = setTimeout(() => {
@@ -126,9 +127,9 @@ export default function ObservationForm({ metrics, derivedMetrics = {}, unitByMe
         .then((r) => {
           if (cancelled) return
           // An `exact` hit needs no nudge — the write attaches to it automatically.
-          setSuggestions(r.exact ? [] : r.suggestions)
+          setFetched({ name: trimmedMetric, list: r.exact ? [] : r.suggestions })
         })
-        .catch(() => { if (!cancelled) setSuggestions([]) })
+        .catch(() => { if (!cancelled) setFetched({ name: trimmedMetric, list: [] }) })
     }, 350)
     return () => { cancelled = true; clearTimeout(t) }
   }, [trimmedMetric, mightBeNew])

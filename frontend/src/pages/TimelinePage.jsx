@@ -189,7 +189,11 @@ export default function TimelinePage() {
   const [adding, setAdding] = useState(false)
   const [editingEvent, setEditingEvent] = useState(null)
   const [confirmingId, setConfirmingId] = useState(null) // event id armed for delete
-  const [pendingFocus, setPendingFocus] = useState(null) // ym to scroll to after a view switch
+  // Month to scroll to after a view switch, as { ym } — a fresh object per request, so
+  // asking for the same month twice still scrolls. `focusedRef` records the request
+  // already handled, instead of clearing state from inside the effect.
+  const [pendingFocus, setPendingFocus] = useState(null)
+  const focusedRef = useRef(null)
   const sectionRef = useRef(null)
   const topbarRef = useRef(null)
 
@@ -225,10 +229,10 @@ export default function TimelinePage() {
   // Calendar → timeline focus: switch view, ensure the month is expanded, then scroll it
   // under the sticky headers. Runs after render so the target section exists in the DOM.
   useEffect(() => {
-    if (!pendingFocus || view !== 'timeline') return
-    const el = document.getElementById(`tl-month-${pendingFocus}`)
+    if (!pendingFocus || view !== 'timeline' || focusedRef.current === pendingFocus) return
+    const el = document.getElementById(`tl-month-${pendingFocus.ym}`)
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    setPendingFocus(null)
+    focusedRef.current = pendingFocus
   }, [pendingFocus, view, entries])
 
   function afterEventSaved() {
@@ -262,7 +266,7 @@ export default function TimelinePage() {
       return next
     })
     setView('timeline')
-    setPendingFocus(ym)
+    setPendingFocus({ ym })
   }
 
   if (error && !entries) return <p className="error">Couldn’t reach the API: {error}</p>
