@@ -4,7 +4,7 @@ import {
   getReports, getReport, reportPdfUrl,
   getDocuments, getDocument, documentPdfUrl, searchDocuments,
 } from '../api'
-import { InfoCircleIcon } from '../components/icons'
+import InfoNote from '../components/shell/InfoNote'
 import SearchField from '../components/shell/SearchField'
 import Loading from '../components/shell/Loading'
 
@@ -168,14 +168,11 @@ export default function DocumentsPage() {
     <section className="docs">
       <div className="docs__head">
         <h2 className="docs__title">Documents</h2>
-        <span className="docs__info" tabIndex={0} role="note" aria-label="Privacy note">
-          <InfoCircleIcon size={16} />
-          <span className="docs__info-bubble">
-            Local only — read from this machine and never uploaded. Each document is
-            shown as the original scan; nothing here is generated, translated, summarised
-            or interpreted by this app.
-          </span>
-        </span>
+        <InfoNote prefix="docs">
+          Local only — read from this machine and never uploaded. Each document is
+          shown as the original scan; nothing here is generated, translated, summarised
+          or interpreted by this app.
+        </InfoNote>
       </div>
 
       <div className="docs__filter">

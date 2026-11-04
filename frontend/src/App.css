@@ -1863,16 +1863,23 @@ select option {
   line-height: 1.45;
   border-radius: 6px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.12s ease;
+  display: none;
   pointer-events: none;
 }
 
+/* Hidden bubbles are display:none, not visibility:hidden: a hidden-but-laid-out bubble
+   still counts toward the page's width, and on a phone (icon near the right edge) that
+   made Metrics, Imaging and Documents scroll sideways. The fade moves to an animation,
+   since display can't transition; an open bubble is kept on screen by viewportClamp.js. */
 .hint:hover .hint__bubble,
 .hint__trigger:focus-visible + .hint__bubble {
-  opacity: 1;
-  visibility: visible;
+  display: block;
+  animation: bubble-in 0.12s ease;
+}
+
+@keyframes bubble-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* A condensed (kind, direction) group: the li holds a <details> instead of the
@@ -4496,9 +4503,9 @@ select option {
   font-weight: 600;
 }
 
-/* Info affordance: the privacy note on hover/focus. The bubble is always in the DOM
-   (just visually hidden) so assistive tech can reach the text — a title attribute
-   would not be selectable or reliably announced. */
+/* Info affordance: the privacy note on hover/focus (components/shell/InfoNote.jsx). The
+   bubble is real text in the DOM, shown when the focusable note is hovered or focused —
+   unlike a title attribute, it is selectable and is read out when it appears. */
 .dcm__info {
   position: relative;
   display: inline-flex;
@@ -4527,16 +4534,15 @@ select option {
   border: 1px solid var(--c-line);
   border-radius: 6px;
   box-shadow: 0 2px 10px rgba(33, 37, 41, 0.14);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.12s;
+  display: none;
 }
 
+/* display:none when hidden, for the same reason as .hint__bubble above. */
 .dcm__info:hover .dcm__info-bubble,
 .dcm__info:focus .dcm__info-bubble,
 .dcm__info:focus-within .dcm__info-bubble {
-  opacity: 1;
-  visibility: visible;
+  display: block;
+  animation: bubble-in 0.12s ease;
 }
 
 /* Documents reuses the imaging page's info affordance verbatim — same control, same
@@ -4560,16 +4566,14 @@ select option {
   border: 1px solid var(--c-line);
   border-radius: 6px;
   box-shadow: 0 2px 10px rgba(33, 37, 41, 0.14);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.12s;
+  display: none;
 }
 
 .docs__info:hover .docs__info-bubble,
 .docs__info:focus .docs__info-bubble,
 .docs__info:focus-within .docs__info-bubble {
-  opacity: 1;
-  visibility: visible;
+  display: block;
+  animation: bubble-in 0.12s ease;
 }
 
 /* The imaging page is an APP-LIKE, NON-SCROLLING layout: the viewer must not be able to

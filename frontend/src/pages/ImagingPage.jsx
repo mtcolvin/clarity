@@ -3,10 +3,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getImagingStudies, getImagingRoi, imagingSliceUrl, imagingFrameUrl } from '../api'
 import { parseFrame, renderFrame } from '../dicom/frame'
 import {
-  PlayIcon, PauseIcon, DistanceIcon, AngleIcon, RegionIcon, InfoCircleIcon, MenuIcon,
+  PlayIcon, PauseIcon, DistanceIcon, AngleIcon, RegionIcon, MenuIcon,
   ExpandIcon, ContractIcon,
 } from '../components/icons'
 import Loading from '../components/shell/Loading'
+import InfoNote from '../components/shell/InfoNote'
 
 // Local DICOM viewer. Everything here is on-machine: the backend reads a local imaging
 // folder, surfaces ONLY allowlisted metadata (no patient/physician/facility PII), and
@@ -1033,13 +1034,10 @@ export default function ImagingPage() {
           <MenuIcon /> Studies
         </button>
         <h2 className="dcm__title">Imaging</h2>
-        <span className="dcm__info" tabIndex={0} role="note" aria-label="Privacy note">
-          <InfoCircleIcon size={16} />
-          <span className="dcm__info-bubble">
-            Local only — rendered on this machine; nothing is uploaded. Patient, physician
-            and facility details in the files are never shown.
-          </span>
-        </span>
+        <InfoNote prefix="dcm">
+          Local only — rendered on this machine; nothing is uploaded. Patient, physician
+          and facility details in the files are never shown.
+        </InfoNote>
       </div>
       <div className="dcm__layout">
         {selected
